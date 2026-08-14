@@ -176,19 +176,67 @@ class ReportPipeline:
                 lines.append(f"[{title}] ({authors}, {year}) {link}\n摘要: {summary}")
             return "\n---\n".join(lines) or "（无结果）"
 
-        return search_knowledge, query_filings, search_arxiv
+        @tool
+        def generate_chart(chart_type: str, data: str, title: str) -> str:
+            """生成统计图表 PNG 并返回 Markdown 图片引用（用于在报告中嵌入可视化）。
+
+            Args:
+                chart_type: 图表类型，可选 bar（柱状）/ line（折线）/ pie（饼图）。
+                data: JSON 字符串，形如 [{"label":"Q1","value":88}, ...]。
+                title: 图表标题。
+            """
+            import json as _json
+            import uuid as _uuid
+
+            import matplotlib
+
+            matplotlib.use("Agg")
+            import matplotlib.pyplot as _plt
+
+            _plt.rcParams["font.sans-serif"] = [
+                "Microsoft YaHei",
+                "SimHei",
+                "Arial Unicode MS",
+                "DejaVu Sans",
+            ]
+            _plt.rcParams["axes.unicode_minus"] = False
+
+            rows = _json.loads(data)
+            labels = [r.get("label", "") for r in rows]
+            values = [float(r.get("value", 0)) for r in rows]
+            fig, ax = _plt.subplots(figsize=(8, 4))
+            if chart_type == "bar":
+                ax.bar(labels, values)
+            elif chart_type == "line":
+                ax.plot(labels, values, marker="o")
+            elif chart_type == "pie":
+                ax.pie(values, labels=labels, autopct="%1.1f%%")
+            else:
+                raise ValueError(f"不支持的图表类型: {chart_type}")
+            ax.set_title(title)
+            _plt.tight_layout()
+
+            out_dir = settings.CHART_DIR
+            out_dir.mkdir(parents=True, exist_ok=True)
+            fname = f"{_uuid.uuid4().hex[:10]}.png"
+            _plt.savefig(out_dir / fname, dpi=120)
+            _plt.close(fig)
+            return f"![{title}](/charts/{fname})"
+
+        return search_knowledge, query_filings, search_arxiv, generate_chart
 
     def _build_agents(self, model, report_type: str = "weekly"):
-        search_knowledge, query_filings, search_arxiv = self._make_tools()
+        search_knowledge, query_filings, search_arxiv, generate_chart = self._make_tools()
         template = REPORT_TEMPLATES.get(report_type, REPORT_TEMPLATES["weekly"])
         extra = (
             f"4) 按「{template['sections']}」分节；"
-            f"5) 正文不少于 {template['min_words']} 字。"
+            f"5) 正文不少于 {template['min_words']} 字；"
+            f"6) 若报告含可量化对比数据（营收/增速/市场份额等），调用 generate_chart 生成图表嵌入对应小节。"
         )
         if template.get("cite_format"):
-            extra += f"6) {template['cite_format']}。"
+            extra += f"7) {template['cite_format']}。"
         researcher = CodeAgent(
-            tools=[search_knowledge, query_filings, search_arxiv],
+            tools=[search_knowledge, query_filings, search_arxiv, generate_chart],
             model=model,
             max_steps=12,
             instructions=RESEARCHER_INSTRUCTIONS.format(extra=extra),
@@ -271,7 +319,7 @@ class ReportPipeline:
 
         问答预算为任务预算的 1/10，独立熔断；history 提供最近几轮 Q/A 用于指代消解。
         """
-        search_knowledge, query_filings, search_arxiv = self._make_tools()
+        search_knowledge, query_filings, search_arxiv, _generate_chart = self._make_tools()
         model = BudgetedModel(
             build_model(), budget_chars=max(100_000, settings.TOKEN_BUDGET_CHARS // 10)
         )

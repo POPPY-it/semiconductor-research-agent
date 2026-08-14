@@ -184,6 +184,33 @@ def test_recover_stale(tmp_path):
     assert store.get(b)["status"] == "error"
 
 
+def test_generate_chart_tool(tmp_path):
+    m = pytest.MonkeyPatch()
+    m.setattr(settings, "CHART_DIR", tmp_path / "charts")
+
+    from agent.orchestrator import ReportPipeline
+
+    class FakeRetriever:
+        documents = {}
+
+        def search_hybrid(self, q, top_k=5):
+            return []
+
+        def search_reranked(self, q, top_k=5):
+            return []
+
+    class FakeStore:
+        def query_articles(self, **kw):
+            return []
+
+    pipe = ReportPipeline(FakeRetriever(), FakeStore())
+    _sk, _qf, _sa, gen_chart = pipe._make_tools()
+    md = gen_chart("bar", '[{"label":"A","value":10},{"label":"B","value":20}]', "测试图表")
+    assert md.startswith("![测试图表](/charts/")
+    fname = md.split("(/charts/")[1].rstrip(")")
+    assert (tmp_path / "charts" / fname).exists()
+
+
 # ---------- token 预算熔断 ----------
 
 class FakeModel:

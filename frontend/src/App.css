@@ -388,6 +388,14 @@ body {
   text-decoration: underline;
 }
 
+.report-body img {
+  max-width: 100%;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-sm);
+  margin: 12px 0;
+}
+
 .report-body ul, .report-body ol {
   padding-left: 22px;
   margin-bottom: 14px;

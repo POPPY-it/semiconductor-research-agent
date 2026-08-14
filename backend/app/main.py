@@ -276,6 +276,10 @@ def create_app(
 
     from fastapi.staticfiles import StaticFiles
 
+    # 图表目录：研究 Agent 生成的 PNG 经此静态托管，报告内嵌引用
+    settings.CHART_DIR.mkdir(parents=True, exist_ok=True)
+    app.mount("/charts", StaticFiles(directory=str(settings.CHART_DIR)), name="charts")
+
     # Windows 上 mimetypes 依赖注册表，需显式注册（否则 .js 被当 text/plain，模块脚本加载失败）
     for ext, mime in (
         (".js", "text/javascript"),
