@@ -9,7 +9,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from data.collectors.article_content import fetch_content  # noqa: E402
+from data.collectors.article_content import fetch_content, fetch_content_advanced  # noqa: E402
 from data.storage import SQLiteStore  # noqa: E402
 
 DEFAULT_DB = Path(__file__).resolve().parents[1] / "data" / "articles.db"
@@ -18,6 +18,9 @@ DEFAULT_DB = Path(__file__).resolve().parents[1] / "data" / "articles.db"
 SEC_UA = {
     "User-Agent": "SemiconductorResearchAgent/0.1 (campus recruiting project; contact: research@example.com)"
 }
+
+NEWS_SOURCES = ("GoogleNews", "IT之家", "新浪科技")
+GOOGLE_NEWS_PROXIES = {"http": "http://127.0.0.1:10808", "https": "http://127.0.0.1:10808"}
 
 
 def main() -> None:
@@ -30,7 +33,7 @@ def main() -> None:
     try:
         articles = store.query_articles(limit=300)
         if args.source == "news":
-            targets = [a for a in articles if a["source"] in ("GoogleNews", "IT之家") and not a["content"]]
+            targets = [a for a in articles if a["source"] in NEWS_SOURCES and not a["content"]]
         elif args.source == "sec":
             targets = [a for a in articles if a["source"] == "SEC_EDGAR" and not a["content"]]
         else:
@@ -40,7 +43,26 @@ def main() -> None:
         for art in targets[: args.limit]:
             max_chars = 8000 if art["source"] == "SEC_EDGAR" else 6000
             headers = SEC_UA if art["source"] == "SEC_EDGAR" else None
-            content = fetch_content(art["url"], max_chars=max_chars, headers=headers)
+            if art["source"] == "SEC_EDGAR":
+                content = fetch_content(art["url"], max_chars=max_chars, headers=headers)
+            else:
+                # GoogleNews 链接需走代理；直连源（IT之家/新浪）直连即可
+                content = fetch_content_advanced(art["url"], max_chars=max_chars, timeout=12)
+                if not content and art["source"] == "GoogleNews":
+                    try:
+                        import requests
+
+                        resp = requests.get(
+                            art["url"], proxies=GOOGLE_NEWS_PROXIES, timeout=15,
+                            headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/151.0.0.0"},
+                        )
+                        import trafilatura
+
+                        text = trafilatura.extract(resp.content, include_comments=False)
+                        if text and len(text.strip()) >= 80:
+                            content = text.strip()[:max_chars]
+                    except Exception:
+                        pass
             if not content and art["source"] == "SEC_EDGAR":
                 time.sleep(2.0)  # 403 限流则退避重试一次
                 content = fetch_content(art["url"], max_chars=max_chars, headers=headers)

@@ -73,6 +73,24 @@ export function askQuestion(question: string) {
   });
 }
 
+export async function uploadDocument(file: File) {
+  const form = new FormData();
+  form.append("file", file);
+  const res = await fetch("/api/v1/documents", {
+    method: "POST",
+    headers: { "X-API-Token": TOKEN },
+    body: form,
+  });
+  if (!res.ok) throw new Error(`上传失败 HTTP ${res.status}`);
+  return res.json();
+}
+
+export function listDocuments() {
+  return request<{ documents: { title: string; chars: number }[] }>(
+    "/api/v1/documents"
+  );
+}
+
 export function getSession(id: number) {
   return request<SessionDetail>(`/api/v1/sessions/${id}`);
 }

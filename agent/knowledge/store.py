@@ -41,3 +41,13 @@ class ChromaStore(VectorStore):
             VectorHit(doc_id=str(doc_id), score=1.0 - float(dist))
             for doc_id, dist in zip(ids, dists)
         ]
+
+    def reset(self) -> None:
+        """删除并重建集合（重建索引时避免 doc_id 冲突/脏数据）。"""
+        try:
+            self._client.delete_collection(self._collection.name)
+        except Exception:  # noqa: BLE001 —— 集合不存在等场景忽略
+            pass
+        self._collection = self._client.get_or_create_collection(
+            name=self._collection.name, metadata={"hnsw:space": "cosine"}
+        )

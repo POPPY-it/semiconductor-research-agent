@@ -13,7 +13,10 @@ from .base import BaseCollector
 
 GOOGLE_NEWS_PROXIES = {"http": "http://127.0.0.1:10808", "https": "http://127.0.0.1:10808"}
 
-KEYWORDS = ("半导体", "芯片", "晶圆", "光刻", "存储", "台积电", "中芯", "EDA", "先进封装", "GPU", "HBM")
+KEYWORDS = (
+    "半导体", "芯片", "晶圆", "光刻", "存储", "台积电", "中芯", "EDA",
+    "先进封装", "GPU", "HBM", "集成电路", "晶圆代工", "算力", "AI芯片", "英伟达",
+)
 
 
 def _parse_rss_items(xml_bytes: bytes, limit: int, source: str, keyword_filter=None) -> list[dict]:
@@ -38,6 +41,8 @@ def _parse_rss_items(xml_bytes: bytes, limit: int, source: str, keyword_filter=N
 
 
 class GoogleNewsRSSCollector(BaseCollector):
+    """Google News RSS（需代理；代理不可用时自动失败降级，不阻塞其他源）。"""
+
     name = "google_news"
 
     def __init__(self, query: str = "半导体", limit: int = 10):
@@ -49,9 +54,35 @@ class GoogleNewsRSSCollector(BaseCollector):
             "https://news.google.com/rss/search?"
             f"q={requests.utils.quote(self.query)}&hl=zh-CN&gl=CN&ceid=CN:zh-Hans"
         )
-        resp = requests.get(url, proxies=GOOGLE_NEWS_PROXIES, timeout=30)
+        resp = requests.get(url, proxies=GOOGLE_NEWS_PROXIES, timeout=15)
         resp.raise_for_status()
         return _parse_rss_items(resp.content, self.limit, source="GoogleNews")
+
+
+class SinaTechRSSCollector(BaseCollector):
+    """新浪科技滚动新闻 RSS（直连可用，无需代理）。"""
+
+    name = "sina_tech"
+    URL = "https://rss.sina.com.cn/tech/rollnews.xml"
+
+    def __init__(self, limit: int = 50):
+        self.limit = limit
+
+    def fetch(self) -> list[dict]:
+        resp = requests.get(
+            self.URL,
+            headers={
+                "User-Agent": (
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36"
+                )
+            },
+            timeout=15,
+        )
+        resp.raise_for_status()
+        return _parse_rss_items(
+            resp.content, self.limit, source="新浪科技", keyword_filter=KEYWORDS
+        )
 
 
 class ITHomeRSSCollector(BaseCollector):

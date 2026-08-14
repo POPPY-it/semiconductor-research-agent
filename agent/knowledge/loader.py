@@ -21,6 +21,7 @@ def build_retriever(
     vector_dir: str | Path,
     model_dir: str | Path,
     with_reranker: bool = True,
+    reset: bool = False,
 ) -> HybridRetriever:
     """从文章库构建检索器（含分块索引；首次调用会下载 embedding 模型）。"""
     store = SQLiteStore(db_path)
@@ -44,6 +45,8 @@ def build_retriever(
 
     embedder = FastembedEmbedder(cache_dir=str(model_dir))
     chroma = ChromaStore(vector_dir, collection="main")
+    if reset:
+        chroma.reset()  # 重建索引：清空旧集合，避免 doc_id 冲突
     reranker = FastembedReranker(cache_dir=str(model_dir)) if with_reranker else None
     retriever = HybridRetriever(docs, embedder, chroma, reranker=reranker)
     retriever.index()

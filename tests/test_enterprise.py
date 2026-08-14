@@ -56,6 +56,9 @@ def make_app(tmp_path, token="test-token-1"):
                 "sources": [{"title": "来源", "url": "https://example.com/x"}],
             }
 
+        def rebuild(self):
+            pass  # 假管道：重建索引为 no-op
+
     service = ReportService(store, bus, lambda: FakePipeline())
     return create_app(queue=queue, service=service)
 
@@ -124,6 +127,28 @@ def test_qa_endpoint(tmp_path):
     assert data["sources"][0]["url"] == "https://example.com/x"
     # 未认证 → 401
     assert client.post("/api/v1/qa", json={"question": "x?"}).status_code == 401
+
+
+def test_upload_document_endpoint(tmp_path):
+    m = pytest.MonkeyPatch()
+    m.setattr(settings, "ARTICLES_DB", tmp_path / "articles.db")
+    client = TestClient(make_app(tmp_path))
+    headers = {"X-API-Token": "test-token-1"}
+    resp = client.post(
+        "/api/v1/documents",
+        headers=headers,
+        files={"file": ("季报.txt", "这是一份测试文档内容，包含半导体行业数据。".encode("utf-8"), "text/plain")},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["new"] == 1
+    # 文档列表
+    docs = client.get("/api/v1/documents", headers=headers).json()["documents"]
+    assert any(d["title"] == "季报.txt" for d in docs)
+    # 无认证 → 401
+    assert client.post(
+        "/api/v1/documents",
+        files={"file": ("x.txt", b"x", "text/plain")},
+    ).status_code == 401
 
 
 def test_recover_stale(tmp_path):

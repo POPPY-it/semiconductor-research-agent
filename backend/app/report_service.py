@@ -1,10 +1,11 @@
 """报告任务服务：把编排器接进会话/事件/存储（在任务队列的 worker 线程中运行）。
 
-W8 加固：质检交付策略（caveat/reject）、任务指标埋点。
+W8 加固：质检交付策略（caveat/reject）、任务指标埋点、索引互斥（生成期间禁止重建）。
 """
 from __future__ import annotations
 
 import logging
+import threading
 import time
 from dataclasses import dataclass
 from typing import Callable
@@ -59,8 +60,9 @@ class ReportService:
         self.bus = bus
         self._pipeline_factory = pipeline_factory
         self._pipeline = None
+        self._lock = threading.RLock()  # 索引互斥：生成/问答期间禁止重建
 
-    def _get_pipeline(self):
+    def _ensure_pipeline_locked(self):
         if self._pipeline is None:
             self._pipeline = self._pipeline_factory()
         return self._pipeline
@@ -71,9 +73,10 @@ class ReportService:
         try:
             self.store.set_status(session_id, STATUS_RUNNING)
             self.bus.publish(session_id, {"type": "phase", "data": {"phase": "index", "msg": "构建知识库索引..."}})
-            pipeline = self._get_pipeline()
-            self.bus.publish(session_id, {"type": "phase", "data": {"phase": "research", "msg": "研究 Agent 撰写中..."}})
-            result = pipeline.generate(topic, report_type=report_type)
+            with self._lock:
+                pipeline = self._ensure_pipeline_locked()
+                self.bus.publish(session_id, {"type": "phase", "data": {"phase": "research", "msg": "研究 Agent 撰写中..."}})
+                result = pipeline.generate(topic, report_type=report_type)
             verdict = result.get("verdict") or {"passed": False, "issues": []}
             self.bus.publish(
                 session_id,
@@ -115,9 +118,16 @@ class ReportService:
     def qa(self, question: str) -> dict:
         """同步问答（轻量任务，直接跑在请求线程；预算独立熔断）。"""
         t0 = time.time()
-        pipeline = self._get_pipeline()
-        result = pipeline.answer_question(question)
+        with self._lock:
+            pipeline = self._ensure_pipeline_locked()
+            result = pipeline.answer_question(question)
         metrics.inc("qa_requests_total")
         metrics.inc("qa_duration_ms_sum", ("",), int((time.time() - t0) * 1000))
         metrics.inc("qa_count", ())
         return result
+
+    def reindex(self) -> None:
+        """重建知识库索引（文档上传后调用；与生成/问答任务互斥）。"""
+        with self._lock:
+            pipeline = self._ensure_pipeline_locked()
+            pipeline.rebuild()

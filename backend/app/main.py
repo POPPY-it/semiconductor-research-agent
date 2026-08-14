@@ -11,7 +11,7 @@ import logging
 from pathlib import Path
 from typing import Callable
 
-from fastapi import Body, Depends, FastAPI, Header, HTTPException, Request
+from fastapi import Body, Depends, FastAPI, File, Header, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field
@@ -160,6 +160,51 @@ def create_app(
     async def ask_question(req: QuestionRequest = Body(...)):
         """财报/行业数据问答（同步，轻量预算）。"""
         return service.qa(req.question)
+
+    @app.post("/api/v1/documents", dependencies=[Depends(require_auth)])
+    async def upload_document(file: UploadFile = File(...)):
+        """上传文档（PDF/txt/md/html）→ 解析入库 → 重建知识库索引。"""
+        from data.parsers import parse_document
+        from data.storage import SQLiteStore
+
+        data = await file.read()
+        if not data:
+            raise HTTPException(status_code=400, detail="empty file")
+        content = parse_document(data, file.filename or "upload.txt")
+        if not content.strip():
+            raise HTTPException(status_code=400, detail="无法解析文档内容")
+        store = SQLiteStore(settings.ARTICLES_DB)
+        try:
+            new = store.upsert_articles(
+                [
+                    {
+                        "source": "upload",
+                        "title": file.filename or "upload.txt",
+                        "url": f"upload://{file.filename or 'file'}",
+                        "content": content,
+                    }
+                ]
+            )
+        finally:
+            store.close()
+        service.reindex()  # 重建知识库索引（与生成任务互斥）
+        return {"title": file.filename, "chars": len(content), "new": new}
+
+    @app.get("/api/v1/documents", dependencies=[Depends(require_auth)])
+    async def list_documents():
+        from data.storage import SQLiteStore
+
+        store = SQLiteStore(settings.ARTICLES_DB)
+        try:
+            rows = store.query_articles(source="upload", limit=100)
+        finally:
+            store.close()
+        return {
+            "documents": [
+                {"title": r["title"], "chars": len(r["content"]), "fetched_at": ""}
+                for r in rows
+            ]
+        }
 
     @app.get("/api/v1/sessions", dependencies=[Depends(require_auth)])
     async def list_sessions(limit: int = 20):

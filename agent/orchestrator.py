@@ -88,6 +88,14 @@ class ReportPipeline:
         self.retriever = retriever
         self.store = store
 
+    def rebuild(self) -> None:
+        """重建知识库索引（新文档入库后调用）。"""
+        from agent.knowledge.loader import build_retriever
+
+        self.retriever = build_retriever(
+            settings.ARTICLES_DB, settings.VECTOR_DIR, settings.MODEL_DIR, reset=True
+        )
+
     def _make_tools(self):
         retriever = self.retriever
 

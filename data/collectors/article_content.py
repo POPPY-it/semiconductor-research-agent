@@ -77,6 +77,31 @@ class _ParagraphExtractor(HTMLParser):
             self._buf.append(data)
 
 
+def fetch_content_advanced(
+    url: str,
+    timeout: int = 20,
+    max_chars: int = 8000,
+    headers: dict | None = None,
+) -> str:
+    """专业正文提取（trafilatura）：对新闻/博客类网页效果远好于段落启发式；
+    失败时回退到 fetch_content 的 html.parser 实现。"""
+    try:
+        import trafilatura
+
+        resp = requests.get(
+            url, headers=headers or UA, timeout=timeout, allow_redirects=True
+        )
+        resp.raise_for_status()
+        text = trafilatura.extract(
+            resp.content, include_comments=False, include_tables=True, favor_recall=True
+        )
+        if text and len(text.strip()) >= 80:
+            return re.sub(r"\n{3,}", "\n\n", text).strip()[:max_chars]
+    except Exception:  # noqa: BLE001
+        pass
+    return fetch_content(url, timeout=timeout, max_chars=max_chars, headers=headers)
+
+
 def fetch_content(
     url: str,
     timeout: int = 15,
