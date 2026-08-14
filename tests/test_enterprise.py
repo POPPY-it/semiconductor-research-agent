@@ -145,6 +145,20 @@ def test_budget_model_accepts_chatmessage_objects():
     assert wrapped.used_chars >= 100
 
 
+def test_budget_error_unwrapped_from_wrapper():
+    from agent.orchestrator import _extract_budget_error
+
+    inner = BudgetExceededError("预算超限")
+    try:
+        raise inner
+    except BudgetExceededError as e1:
+        try:
+            raise RuntimeError("Error in generating model output: token 预算超限") from e1
+        except RuntimeError as e2:
+            found = _extract_budget_error(e2)
+            assert found is inner  # 沿 __cause__ 链找回原始熔断异常
+
+
 # ---------- 质检交付策略 ----------
 
 def test_qa_policy_caveat_injects_banner():

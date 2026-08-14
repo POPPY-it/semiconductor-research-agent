@@ -73,6 +73,16 @@ def _extract_json(text) -> dict | None:
         return None
 
 
+def _extract_budget_error(exc: Exception) -> BudgetExceededError | None:
+    """沿异常链找到 BudgetExceededError（smolagents 会把它包进 AgentGenerationError）。"""
+    cur: BaseException | None = exc
+    while cur is not None:
+        if isinstance(cur, BudgetExceededError):
+            return cur
+        cur = cur.__cause__ or cur.__context__
+    return None
+
+
 class ReportPipeline:
     def __init__(self, retriever, store):
         self.retriever = retriever
@@ -155,9 +165,10 @@ class ReportPipeline:
         def guarded_run(agent, task, reset: bool = True):
             try:
                 return agent.run(task, reset=reset)
-            except BudgetExceededError:
-                raise
             except Exception as e:  # noqa: BLE001
+                budget_err = _extract_budget_error(e)
+                if budget_err is not None:
+                    raise budget_err  # 熔断错误干净抛出，SSE/前端显示可读原因
                 if (
                     fallback_base is not None
                     and not used_fallback[0]

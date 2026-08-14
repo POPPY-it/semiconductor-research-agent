@@ -23,8 +23,9 @@ class Settings:
     # ---- 企业级配置（W8 加固）----
     # 质检交付策略：caveat=附警示横幅交付 / reject=不通过则不交付
     QA_POLICY: str = os.getenv("QA_POLICY", "caveat")
-    # 单任务 token 预算（估算字符数）：超预算熔断
-    TOKEN_BUDGET_CHARS: int = int(os.getenv("TOKEN_BUDGET_CHARS", "1200000"))
+    # 单任务 token 预算（估算字符数）：超预算熔断。
+    # 真实负载校准（W8 实测）：日报含 2 轮修订约消耗 110~160 万字符 → 默认 400 万留余量
+    TOKEN_BUDGET_CHARS: int = int(os.getenv("TOKEN_BUDGET_CHARS", "4000000"))
     # Cookie 签名密钥（留空则从 API_TOKEN 派生，生产环境请显式配置强随机值）
     COOKIE_SECRET: str = os.getenv(
         "COOKIE_SECRET", os.getenv("API_TOKEN", "dev-insecure-secret")
