@@ -10,7 +10,8 @@ import logging
 from pathlib import Path
 from typing import Callable
 
-from fastapi import Body, Depends, FastAPI, Header, HTTPException
+from fastapi import Body, Depends, FastAPI, Header, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from sse_starlette.sse import EventSourceResponse
 
@@ -51,6 +52,13 @@ def create_app(
     service: ReportService | None = None,
 ) -> FastAPI:
     app = FastAPI(title="Semiconductor Research Agent API", version="0.2.0")
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
     if queue is None:
         queue = ThreadPoolQueue(max_workers=2)
@@ -59,8 +67,13 @@ def create_app(
     app.state.queue = queue
     app.state.service = service
 
-    async def require_token(x_api_token: str | None = Header(default=None)) -> None:
-        if settings.auth_enabled() and x_api_token != settings.API_TOKEN:
+    async def require_token(
+        x_api_token: str | None = Header(default=None),
+        token: str | None = Query(default=None),
+    ) -> None:
+        # EventSource 无法自定义 Header，SSE 用 query 参数传 token
+        provided = x_api_token or token
+        if settings.auth_enabled() and provided != settings.API_TOKEN:
             raise HTTPException(status_code=401, detail="invalid or missing X-API-Token")
 
     @app.get("/api/health")
@@ -84,6 +97,13 @@ def create_app(
             raise HTTPException(status_code=404, detail="session not found")
         return data
 
+    @app.get("/api/v1/sessions/{session_id}/report", dependencies=[Depends(require_token)])
+    async def get_report_md(session_id: int):
+        data = service.store.get(session_id)
+        if data is None:
+            raise HTTPException(status_code=404, detail="session not found")
+        return {"report_md": service.store.get_report_md(session_id)}
+
     @app.get("/api/v1/sessions/{session_id}/events", dependencies=[Depends(require_token)])
     async def stream_events(session_id: int):
         if service.store.get(session_id) is None:
@@ -104,6 +124,26 @@ def create_app(
                 sub.close()
 
         return EventSourceResponse(gen(), ping=15)
+
+    # 生产模式：托管前端构建产物（frontend/dist 存在时挂载）
+    import mimetypes
+
+    from fastapi.staticfiles import StaticFiles
+
+    # Windows 上 mimetypes 依赖注册表，需显式注册（否则 .js 被当 text/plain，模块脚本加载失败）
+    for ext, mime in (
+        (".js", "text/javascript"),
+        (".mjs", "text/javascript"),
+        (".css", "text/css"),
+        (".svg", "image/svg+xml"),
+        (".json", "application/json"),
+        (".woff2", "font/woff2"),
+    ):
+        mimetypes.add_type(mime, ext)
+
+    dist = Path(__file__).resolve().parents[2] / "frontend" / "dist"
+    if dist.exists():
+        app.mount("/", StaticFiles(directory=str(dist), html=True), name="frontend")
 
     return app
 

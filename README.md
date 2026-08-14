@@ -54,6 +54,11 @@ python -m venv .venv
 # 运行第一个 Agent
 .venv\Scripts\python examples\01_hello_agent.py
 
+# 启动完整产品（后端 API + 前端工作台，需先构建前端）
+cd frontend; npm install --registry=https://registry.npmmirror.com; npm run build; cd ..
+.venv\Scripts\python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8000
+# 浏览器打开 http://127.0.0.1:8000 （前端开发模式：frontend 下 npm run dev）
+
 # 数据采集（3 个数据源，SQLite 去重入库）
 .venv\Scripts\python scripts\collect.py --once
 # 每日定时采集（常驻）
@@ -76,6 +81,8 @@ python -m venv .venv
 - [x] W4 M2 RAG 落地（长文档语料 + 分块 + 加权 RRF + reranker，评测见 `docs/w4-m2m3-report.md`）
 - [x] W4 M3 多 Agent 编排（研究/质检/修订循环，实测生成带引用周报）
 - [x] **博客③已发布**：[多 Agent 协作与质检链路](https://juejin.cn/post/7673807945507242018)
-- [ ] W5 M4 研报模板 + M5 服务层完整化 → W6-7 前端/上线
+- [x] W5 M4 研报模板 + M5 服务层（任务队列/会话/SSE/鉴权，冒烟实测）
+- [x] W6 M6 前端工作台（React+antd，浏览器 E2E 验证通过）
+- [ ] W7 生产化上线（Docker/HTTPS/压测）+ 博客④ → W8 面试打磨
 
 详细计划见 [PLAN.md](PLAN.md)。

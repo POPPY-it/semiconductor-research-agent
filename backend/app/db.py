@@ -92,6 +92,13 @@ class SessionStore:
             }
         return out
 
+    def get_report_md(self, session_id: int) -> str:
+        row = self._conn.execute(
+            "SELECT report_md FROM reports WHERE session_id = ? ORDER BY id DESC LIMIT 1",
+            (session_id,),
+        ).fetchone()
+        return row[0] if row else ""
+
     def list(self, limit: int = 20) -> list[dict]:
         rows = self._conn.execute(
             "SELECT id, topic, report_type, status, created_at FROM sessions ORDER BY id DESC LIMIT ?",
