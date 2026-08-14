@@ -68,6 +68,7 @@ python -m venv .venv
 - [x] W1D4 技术博客①（`docs/blog-01-smolagents-internals.md`）
 - [x] W1D5 项目骨架 + git init
 - [x] W1D6 数据源验证（SEC EDGAR + Google News RSS + IT之家）
+- [x] **博客①已发布**：[1800 行读懂一个 Agent 引擎：smolagents 内核剖析](https://juejin.cn/post/7673531977241247744)
 - [ ] W2 技术预研 → W3-7 模块开发与上线
 
 详细计划见 [PLAN.md](PLAN.md)。
