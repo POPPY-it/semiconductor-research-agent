@@ -20,9 +20,32 @@ class Settings:
     APP_QUEUE: str = os.getenv("APP_QUEUE", "thread")  # thread | rq
     REDIS_URL: str = os.getenv("REDIS_URL", "redis://127.0.0.1:6379/0")
 
+    # ---- 企业级配置（W8 加固）----
+    # 质检交付策略：caveat=附警示横幅交付 / reject=不通过则不交付
+    QA_POLICY: str = os.getenv("QA_POLICY", "caveat")
+    # 单任务 token 预算（估算字符数）：超预算熔断
+    TOKEN_BUDGET_CHARS: int = int(os.getenv("TOKEN_BUDGET_CHARS", "1200000"))
+    # Cookie 签名密钥（留空则从 API_TOKEN 派生，生产环境请显式配置强随机值）
+    COOKIE_SECRET: str = os.getenv(
+        "COOKIE_SECRET", os.getenv("API_TOKEN", "dev-insecure-secret")
+    )
+    AUTH_COOKIE: str = "agent_auth"
+    AUTH_COOKIE_TTL: int = int(os.getenv("AUTH_COOKIE_TTL", "86400"))
+    # 主/备 LLM（不设则回落到 DEEPSEEK_*）
+    LLM_API_KEY: str = os.getenv("LLM_API_KEY", os.getenv("DEEPSEEK_API_KEY", ""))
+    LLM_BASE_URL: str = os.getenv("LLM_BASE_URL", os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com"))
+    LLM_MODEL: str = os.getenv("LLM_MODEL", os.getenv("DEEPSEEK_MODEL", "deepseek-chat"))
+    FALLBACK_LLM_API_KEY: str = os.getenv("FALLBACK_LLM_API_KEY", "")
+    FALLBACK_LLM_BASE_URL: str = os.getenv("FALLBACK_LLM_BASE_URL", "")
+    FALLBACK_LLM_MODEL: str = os.getenv("FALLBACK_LLM_MODEL", "")
+
     @classmethod
     def auth_enabled(cls) -> bool:
         return bool(cls.API_TOKEN)
+
+    @classmethod
+    def fallback_llm_configured(cls) -> bool:
+        return bool(cls.FALLBACK_LLM_API_KEY and cls.FALLBACK_LLM_BASE_URL and cls.FALLBACK_LLM_MODEL)
 
 
 settings = Settings()

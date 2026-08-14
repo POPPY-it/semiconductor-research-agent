@@ -39,11 +39,25 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json();
 }
 
+export function login() {
+  return request<{ ok: boolean }>("/api/v1/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ token: TOKEN }),
+  });
+}
+
 export function createSession(topic: string, reportType: string) {
   return request<{ session_id: number; task_id: string }>("/api/v1/sessions", {
     method: "POST",
     body: JSON.stringify({ topic, report_type: reportType }),
   });
+}
+
+export function retrySession(id: number) {
+  return request<{ session_id: number; task_id: string }>(
+    `/api/v1/sessions/${id}/retry`,
+    { method: "POST", body: "{}" }
+  );
 }
 
 export function getSession(id: number) {
@@ -66,10 +80,8 @@ export interface StreamHandlers {
 }
 
 export function streamEvents(sessionId: number, handlers: StreamHandlers) {
-  // EventSource 无法自定义 Header → token 走 query（后端同时支持 header/query）
-  const es = new EventSource(
-    `/api/v1/sessions/${sessionId}/events?token=${encodeURIComponent(TOKEN)}`
-  );
+  // 认证走 HttpOnly Cookie（登录接口签发），EventSource 同源自动携带，token 不进 URL
+  const es = new EventSource(`/api/v1/sessions/${sessionId}/events`);
   const parse = (e: MessageEvent): any => {
     try {
       return JSON.parse(e.data);

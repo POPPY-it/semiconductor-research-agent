@@ -46,6 +46,15 @@ class ThreadPoolQueue(TaskQueue):
             return "error" if future.exception() else "done"
         return "queued"
 
+    def pending(self) -> int:
+        """未完成任务数（健康检查用）。"""
+        with self._lock:
+            return sum(
+                1
+                for f in self._futures.values()
+                if not f.done()
+            )
+
     def result(self, task_id: str, timeout: float | None = None):
         future = self._futures.get(task_id)
         if future is None:

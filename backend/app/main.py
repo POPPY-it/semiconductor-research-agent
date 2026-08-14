@@ -1,7 +1,8 @@
-"""服务层 API（M5）：会话 + 任务队列 + SSE 事件流 + 鉴权。
+"""服务层 API（M5+W8 企业级版）。
 
-架构：app 工厂（可注入测试依赖）→ ReportService 在任务队列 worker 中运行编排器
-→ EventBus 把阶段事件推给 SSE 订阅者。
+安全：X-API-Token 登录换取 HttpOnly Cookie（SSE 自动携带，token 不进 URL/日志）；
+防护：请求 ID 审计日志、速率限制；可靠性：启动恢复中断会话、失败任务可重试；
+可观测：/api/metrics（Prometheus 文本）+ 深度健康检查。
 """
 from __future__ import annotations
 
@@ -10,14 +11,17 @@ import logging
 from pathlib import Path
 from typing import Callable
 
-from fastapi import Body, Depends, FastAPI, Header, HTTPException, Query
+from fastapi import Body, Depends, FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field
 from sse_starlette.sse import EventSourceResponse
 
+from .auth import issue_auth_cookie, verify_auth_cookie
 from .core import settings
 from .db import SessionStore
 from .events import EventBus
+from .middleware import RequestLogMiddleware, RateLimitMiddleware, metrics
 from .report_service import ReportService
 from .tasks import RQQueue, TaskQueue, ThreadPoolQueue
 
@@ -47,11 +51,17 @@ class SessionCreate(BaseModel):
     report_type: str = Field("weekly", pattern="^(daily|weekly|deep)$")
 
 
+class LoginRequest(BaseModel):
+    token: str = Field(..., min_length=1)
+
+
 def create_app(
     queue: TaskQueue | None = None,
     service: ReportService | None = None,
 ) -> FastAPI:
-    app = FastAPI(title="Semiconductor Research Agent API", version="0.2.0")
+    app = FastAPI(title="Semiconductor Research Agent API", version="0.3.0")
+    app.add_middleware(RequestLogMiddleware)
+    app.add_middleware(RateLimitMiddleware)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
@@ -70,44 +80,106 @@ def create_app(
     app.state.queue = queue
     app.state.service = service
 
-    async def require_token(
+    # 启动恢复：上次进程中断的会话标为 error，用户可重试
+    recovered = service.store.recover_stale()
+    if recovered:
+        logger.warning("恢复 %d 个中断会话（已标记 error，可重试）", recovered)
+
+    async def require_auth(
+        request: Request,
         x_api_token: str | None = Header(default=None),
-        token: str | None = Query(default=None),
     ) -> None:
-        # EventSource 无法自定义 Header，SSE 用 query 参数传 token
-        provided = x_api_token or token
-        if settings.auth_enabled() and provided != settings.API_TOKEN:
-            raise HTTPException(status_code=401, detail="invalid or missing X-API-Token")
+        cookie = request.cookies.get(settings.AUTH_COOKIE, "")
+        header_ok = settings.auth_enabled() and x_api_token == settings.API_TOKEN
+        cookie_ok = bool(cookie) and verify_auth_cookie(cookie, settings.COOKIE_SECRET)
+        if not (header_ok or cookie_ok):
+            raise HTTPException(status_code=401, detail="invalid or missing credentials")
+
+    @app.post("/api/v1/auth/login")
+    async def login(req: LoginRequest):
+        if not settings.auth_enabled() or req.token != settings.API_TOKEN:
+            raise HTTPException(status_code=401, detail="invalid token")
+        cookie_value = issue_auth_cookie(settings.COOKIE_SECRET, ttl=settings.AUTH_COOKIE_TTL)
+        from fastapi.responses import JSONResponse
+
+        resp = JSONResponse({"ok": True, "expires_in": settings.AUTH_COOKIE_TTL})
+        resp.set_cookie(
+            settings.AUTH_COOKIE,
+            cookie_value,
+            max_age=settings.AUTH_COOKIE_TTL,
+            httponly=True,
+            samesite="lax",
+        )
+        return resp
+
+    @app.post("/api/v1/auth/logout")
+    async def logout():
+        from fastapi.responses import JSONResponse
+
+        resp = JSONResponse({"ok": True})
+        resp.delete_cookie(settings.AUTH_COOKIE)
+        return resp
 
     @app.get("/api/health")
     async def health():
-        return {"status": "ok", "auth_enabled": settings.auth_enabled()}
+        from data.storage import SQLiteStore
 
-    @app.post("/api/v1/sessions", dependencies=[Depends(require_token)])
+        articles = 0
+        try:
+            s = SQLiteStore(settings.ARTICLES_DB)
+            articles = s.count()
+            s.close()
+        except Exception:  # noqa: BLE001 —— 健康检查不因附属库失败而 500
+            pass
+        return {
+            "status": "ok",
+            "version": "0.3.0",
+            "auth_enabled": settings.auth_enabled(),
+            "queue": {"pending": queue.pending() if hasattr(queue, "pending") else None},
+            "articles": articles,
+            "qa_policy": settings.QA_POLICY,
+            "llm": settings.LLM_MODEL,
+            "fallback_llm": settings.FALLBACK_LLM_MODEL or None,
+        }
+
+    @app.get("/api/metrics", include_in_schema=False)
+    async def get_metrics():
+        return PlainTextResponse(metrics.render(), media_type="text/plain; version=0.0.4")
+
+    @app.post("/api/v1/sessions", dependencies=[Depends(require_auth)])
     async def create_session(req: SessionCreate = Body(...)):
         session_id = service.store.create(req.topic, req.report_type)
         task_id = queue.submit(service.run, session_id, req.topic, req.report_type)
         return {"session_id": session_id, "task_id": task_id}
 
-    @app.get("/api/v1/sessions", dependencies=[Depends(require_token)])
+    @app.get("/api/v1/sessions", dependencies=[Depends(require_auth)])
     async def list_sessions(limit: int = 20):
         return {"sessions": service.store.list(limit=limit)}
 
-    @app.get("/api/v1/sessions/{session_id}", dependencies=[Depends(require_token)])
+    @app.get("/api/v1/sessions/{session_id}", dependencies=[Depends(require_auth)])
     async def get_session(session_id: int):
         data = service.store.get(session_id)
         if data is None:
             raise HTTPException(status_code=404, detail="session not found")
         return data
 
-    @app.get("/api/v1/sessions/{session_id}/report", dependencies=[Depends(require_token)])
+    @app.post("/api/v1/sessions/{session_id}/retry", dependencies=[Depends(require_auth)])
+    async def retry_session(session_id: int):
+        data = service.store.get(session_id)
+        if data is None:
+            raise HTTPException(status_code=404, detail="session not found")
+        service.store.set_status(session_id, "queued")
+        task_id = queue.submit(service.run, session_id, data["topic"], data["report_type"])
+        return {"session_id": session_id, "task_id": task_id}
+
+    @app.get("/api/v1/sessions/{session_id}/report", dependencies=[Depends(require_auth)])
     async def get_report_md(session_id: int):
         data = service.store.get(session_id)
         if data is None:
             raise HTTPException(status_code=404, detail="session not found")
         return {"report_md": service.store.get_report_md(session_id)}
 
-    @app.get("/api/v1/sessions/{session_id}/events", dependencies=[Depends(require_token)])
+    @app.get("/api/v1/sessions/{session_id}/events", dependencies=[Depends(require_auth)])
     async def stream_events(session_id: int):
         if service.store.get(session_id) is None:
             raise HTTPException(status_code=404, detail="session not found")

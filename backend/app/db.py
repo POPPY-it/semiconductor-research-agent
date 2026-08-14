@@ -1,8 +1,9 @@
-"""会话与报告存储（SQLite）。"""
+"""会话与报告存储（SQLite，线程安全：锁 + 自动提交）。"""
 from __future__ import annotations
 
 import json
 import sqlite3
+import threading
 from pathlib import Path
 
 SCHEMA = """
@@ -34,34 +35,46 @@ STATUS_ERROR = "error"
 class SessionStore:
     def __init__(self, db_path: str | Path):
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
-        self._conn = sqlite3.connect(str(db_path), check_same_thread=False)
+        # isolation_level=None → 自动提交，避免跨线程事务冲突；加锁兜底并发写
+        self._conn = sqlite3.connect(
+            str(db_path), check_same_thread=False, isolation_level=None
+        )
+        self._lock = threading.Lock()
         self._conn.executescript(SCHEMA)
-        self._conn.commit()
 
     def create(self, topic: str, report_type: str) -> int:
-        cur = self._conn.execute(
-            "INSERT INTO sessions (topic, report_type, status, created_at) "
-            "VALUES (?, ?, ?, datetime('now', 'localtime'))",
-            (topic, report_type, STATUS_QUEUED),
-        )
-        self._conn.commit()
+        with self._lock:
+            cur = self._conn.execute(
+                "INSERT INTO sessions (topic, report_type, status, created_at) "
+                "VALUES (?, ?, ?, datetime('now', 'localtime'))",
+                (topic, report_type, STATUS_QUEUED),
+            )
         return cur.lastrowid
 
     def set_status(self, session_id: int, status: str) -> None:
-        self._conn.execute(
-            "UPDATE sessions SET status = ?, finished_at = CASE WHEN ? IN ('done','error') "
-            "THEN datetime('now','localtime') ELSE finished_at END WHERE id = ?",
-            (status, status, session_id),
-        )
-        self._conn.commit()
+        with self._lock:
+            self._conn.execute(
+                "UPDATE sessions SET status = ?, finished_at = CASE WHEN ? IN ('done','error') "
+                "THEN datetime('now','localtime') ELSE finished_at END WHERE id = ?",
+                (status, status, session_id),
+            )
 
     def save_report(self, session_id: int, verdict: dict, rounds: int, path: str, md: str) -> None:
-        self._conn.execute(
-            "INSERT INTO reports (session_id, verdict, revision_rounds, report_path, report_md, created_at) "
-            "VALUES (?, ?, ?, ?, ?, datetime('now', 'localtime'))",
-            (session_id, json.dumps(verdict, ensure_ascii=False), rounds, path, md),
-        )
-        self._conn.commit()
+        with self._lock:
+            self._conn.execute(
+                "INSERT INTO reports (session_id, verdict, revision_rounds, report_path, report_md, created_at) "
+                "VALUES (?, ?, ?, ?, ?, datetime('now', 'localtime'))",
+                (session_id, json.dumps(verdict, ensure_ascii=False), rounds, path, md),
+            )
+
+    def recover_stale(self) -> int:
+        """进程重启恢复：把中断在 queued/running 的会话标记为 error（可重试）。"""
+        with self._lock:
+            cur = self._conn.execute(
+                "UPDATE sessions SET status = 'error', finished_at = datetime('now','localtime') "
+                "WHERE status IN ('queued', 'running')"
+            )
+        return cur.rowcount
 
     def get(self, session_id: int) -> dict | None:
         row = self._conn.execute(

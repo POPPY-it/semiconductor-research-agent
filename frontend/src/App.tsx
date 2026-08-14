@@ -1,14 +1,20 @@
-import { useState } from "react";
-import { Tabs } from "antd";
+import { useEffect, useState } from "react";
+import { Tabs, message } from "antd";
 import { FileTextOutlined, PlusOutlined } from "@ant-design/icons";
 import NewTask from "./pages/NewTask";
 import SessionsList from "./pages/SessionsList";
 import SessionDetail from "./pages/SessionDetail";
+import { login } from "./api";
 
 export default function App() {
   const [tab, setTab] = useState("new");
   const [openId, setOpenId] = useState<number | null>(null);
   const [listTab, setListTab] = useState("list");
+
+  // 登录换取 HttpOnly Cookie（后续请求含 SSE 均自动携带）
+  useEffect(() => {
+    login().catch(() => message.warning("登录失败，请检查 API token 配置"));
+  }, []);
 
   const openSession = (id: number) => {
     setOpenId(id);

@@ -1,0 +1,176 @@
+"""企业级加固测试：认证 Cookie、限流、恢复、重试、token 预算、质检交付策略。"""
+import sys
+import time
+from pathlib import Path
+
+import pytest
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from fastapi.testclient import TestClient  # noqa: E402
+
+from agent.llm import BudgetedModel, BudgetExceededError  # noqa: E402
+from backend.app.auth import issue_auth_cookie, verify_auth_cookie  # noqa: E402
+from backend.app.core import settings  # noqa: E402
+from backend.app.db import SessionStore  # noqa: E402
+from backend.app.events import EventBus  # noqa: E402
+from backend.app.main import create_app  # noqa: E402
+from backend.app.report_service import ReportService, _apply_qa_policy  # noqa: E402
+from backend.app.tasks import ThreadPoolQueue  # noqa: E402
+
+
+# ---------- 认证 Cookie ----------
+
+def test_auth_cookie_roundtrip_and_expiry():
+    tok = issue_auth_cookie("secret-1", ttl=60)
+    assert verify_auth_cookie(tok, "secret-1") is True
+    assert verify_auth_cookie(tok, "wrong-secret") is False
+    assert verify_auth_cookie("garbage.value", "secret-1") is False
+    expired = issue_auth_cookie("secret-1", ttl=-10)
+    assert verify_auth_cookie(expired, "secret-1") is False
+
+
+def make_app(tmp_path, token="test-token-1"):
+    m = pytest.MonkeyPatch()
+    m.setattr(settings, "API_TOKEN", token)
+    m.setattr(settings, "COOKIE_SECRET", "test-cookie-secret")
+    store = SessionStore(tmp_path / "app.db")
+    bus = EventBus()
+    queue = ThreadPoolQueue(max_workers=2)
+
+    class FakePipeline:
+        def generate(self, topic, report_type="weekly"):
+            return {
+                "report_path": "fake.md",
+                "report": "# 报告\n\n" + topic,
+                "verdict": {"passed": True, "issues": []},
+                "revision_rounds": 0,
+                "model_used": "primary",
+                "budget_used_chars": 100,
+            }
+
+    service = ReportService(store, bus, lambda: FakePipeline())
+    return create_app(queue=queue, service=service)
+
+
+def test_login_sets_httponly_cookie(tmp_path):
+    client = TestClient(make_app(tmp_path))
+    resp = client.post("/api/v1/auth/login", json={"token": "test-token-1"})
+    assert resp.status_code == 200
+    set_cookie = resp.headers.get("set-cookie", "")
+    assert "agent_auth=" in set_cookie and "HttpOnly" in set_cookie
+    # 用 Cookie（不再传 header）创建会话
+    resp2 = client.post(
+        "/api/v1/sessions", json={"topic": "用Cookie认证的会话", "report_type": "daily"}
+    )
+    assert resp2.status_code == 200
+
+    resp3 = client.post("/api/v1/auth/login", json={"token": "wrong"})
+    assert resp3.status_code == 401
+
+
+def test_rate_limit_on_session_create(tmp_path):
+    client = TestClient(make_app(tmp_path))
+    headers = {"X-API-Token": "test-token-1"}
+    codes = [
+        client.post(
+            "/api/v1/sessions",
+            json={"topic": f"限流测试主题{i:02d}", "report_type": "daily"},
+            headers=headers,
+        ).status_code
+        for i in range(7)
+    ]
+    assert codes.count(200) == 5  # 前 5 次放行
+    assert codes[-2:] == [429, 429]  # 之后被限流
+
+
+def test_retry_endpoint(tmp_path):
+    client = TestClient(make_app(tmp_path))
+    headers = {"X-API-Token": "test-token-1"}
+    sid = client.post(
+        "/api/v1/sessions", json={"topic": "重试测试主题", "report_type": "daily"}, headers=headers
+    ).json()["session_id"]
+    deadline = time.time() + 10
+    while time.time() < deadline:
+        if client.get(f"/api/v1/sessions/{sid}", headers=headers).json()["status"] == "done":
+            break
+        time.sleep(0.2)
+    # 模拟失败后重试
+    resp = client.post(f"/api/v1/sessions/{sid}/retry", headers=headers)
+    assert resp.status_code == 200
+    assert client.get(f"/api/v1/sessions/{sid}", headers=headers).json()["status"] in (
+        "queued",
+        "running",
+        "done",
+    )
+
+
+def test_recover_stale(tmp_path):
+    store = SessionStore(tmp_path / "app.db")
+    a = store.create("话题A", "daily")
+    b = store.create("话题B", "weekly")
+    store.set_status(b, "running")
+    n = store.recover_stale()
+    assert n == 2  # queued 与 running 都被恢复为 error
+    assert store.get(a)["status"] == "error"
+    assert store.get(b)["status"] == "error"
+
+
+# ---------- token 预算熔断 ----------
+
+class FakeModel:
+    def __init__(self):
+        self.model_id = "fake"
+
+    def generate(self, messages, **kwargs):
+        return type("Msg", (), {"content": "x" * 100})()
+
+
+def test_budget_model_aborts_when_exceeded():
+    wrapped = BudgetedModel(FakeModel(), budget_chars=250)
+    wrapped.generate([{"content": "a" * 200}])  # 200 < 250 OK
+    with pytest.raises(BudgetExceededError):
+        wrapped.generate([{"content": "b" * 100}])  # 累计 300 > 250 → 熔断
+
+
+def test_budget_model_accepts_chatmessage_objects():
+    # smolagents 实际传入的是 ChatMessage 对象而非 dict
+    wrapped = BudgetedModel(FakeModel(), budget_chars=500)
+
+    class ChatMessage:
+        def __init__(self, content):
+            self.content = content
+
+    wrapped.generate([ChatMessage("a" * 100)])
+    assert wrapped.used_chars >= 100
+
+
+# ---------- 质检交付策略 ----------
+
+def test_qa_policy_caveat_injects_banner():
+    m = pytest.MonkeyPatch()
+    m.setattr(settings, "QA_POLICY", "caveat")
+    result = {
+        "report": "# 正文\n\n内容",
+        "verdict": {"passed": False, "issues": ["数字无来源"]},
+    }
+    md = _apply_qa_policy(result)
+    assert md.startswith("> ⚠️ **质检未通过**")
+    assert "数字无来源" in md and "正文" in md
+
+
+def test_qa_policy_reject_returns_empty():
+    m = pytest.MonkeyPatch()
+    m.setattr(settings, "QA_POLICY", "reject")
+    result = {
+        "report": "# 正文",
+        "verdict": {"passed": False, "issues": ["数字无来源"]},
+    }
+    assert _apply_qa_policy(result) == ""
+
+
+def test_qa_policy_passed_untouched():
+    m = pytest.MonkeyPatch()
+    m.setattr(settings, "QA_POLICY", "reject")
+    result = {"report": "# 正文", "verdict": {"passed": True, "issues": []}}
+    assert _apply_qa_policy(result) == "# 正文"

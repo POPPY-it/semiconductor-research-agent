@@ -1,32 +1,31 @@
-"""多 Agent 研报编排（M3）：研究 Agent → 质检 Agent → 修订循环。
+"""多 Agent 研报编排（M3/W8 企业级版）：研究 → 质检 → 修订循环。
 
-- 研究 Agent（CodeAgent）：检索知识库 + 财报库，撰写带引用的 Markdown 报告
-- 质检 Agent（CodeAgent）：校验事实一致性，输出 JSON 结论
-- 编排器：质检不过 → 把问题反馈给研究 Agent 修订（最多 2 轮），最终落盘
+W8 加固：
+- token 预算熔断（BudgetedModel，超限即停）
+- 备用 LLM 自动切换（连接/超时类错误触发一次）
+- 质检交付策略在服务层执行（见 report_service._apply_qa_policy）
 """
 from __future__ import annotations
 
 import json
-import os
 import re
 import sys
 from datetime import datetime
 from pathlib import Path
 
-from dotenv import load_dotenv
-
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
-load_dotenv(ROOT / ".env")
 
-from smolagents import CodeAgent, OpenAIModel, tool  # noqa: E402
-
-MODEL = OpenAIModel(
-    model_id=os.getenv("DEEPSEEK_MODEL", "deepseek-chat"),
-    api_base=os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com"),
-    api_key=os.environ["DEEPSEEK_API_KEY"],
+from agent.llm import (  # noqa: E402
+    BudgetExceededError,
+    BudgetedModel,
+    build_fallback_model,
+    build_model,
+    is_connection_error,
 )
+from backend.app.core import settings  # noqa: E402
+from smolagents import CodeAgent, tool  # noqa: E402
 
 RESEARCHER_INSTRUCTIONS = (
     "你是半导体行业资深研究员。只能基于工具检索到的资料撰写报告，禁止编造。\n"
@@ -40,7 +39,6 @@ QA_INSTRUCTIONS = (
     "final_answer({\"passed\": true, \"issues\": [\"问题1\",\"问题2\"]})"
 )
 
-# M4：研报类型模板（结构要求 + 篇幅底线）
 REPORT_TEMPLATES = {
     "daily": {
         "label": "日报",
@@ -119,7 +117,7 @@ class ReportPipeline:
 
         return search_knowledge, query_filings
 
-    def _build_agents(self, report_type: str = "weekly"):
+    def _build_agents(self, model, report_type: str = "weekly"):
         search_knowledge, query_filings = self._make_tools()
         template = REPORT_TEMPLATES.get(report_type, REPORT_TEMPLATES["weekly"])
         extra = (
@@ -128,13 +126,13 @@ class ReportPipeline:
         )
         researcher = CodeAgent(
             tools=[search_knowledge, query_filings],
-            model=MODEL,
+            model=model,
             max_steps=12,
             instructions=RESEARCHER_INSTRUCTIONS.format(extra=extra),
         )
         qa = CodeAgent(
             tools=[search_knowledge, query_filings],
-            model=MODEL,
+            model=model,
             max_steps=8,
             instructions=QA_INSTRUCTIONS,
         )
@@ -143,22 +141,47 @@ class ReportPipeline:
     def generate(
         self, topic: str, output_dir: str | Path | None = None, report_type: str = "weekly"
     ) -> dict:
-        researcher, qa = self._build_agents(report_type)
+        primary = BudgetedModel(build_model(), budget_chars=settings.TOKEN_BUDGET_CHARS)
+        fallback_base = build_fallback_model()
+        researcher, qa = self._build_agents(primary, report_type)
+        used_fallback = [False]
 
-        draft = researcher.run(f"撰写研报：{topic}")
+        def switch_to_fallback() -> None:
+            fb = BudgetedModel(fallback_base, budget_chars=settings.TOKEN_BUDGET_CHARS)
+            nonlocal researcher, qa
+            researcher, qa = self._build_agents(fb, report_type)
+            used_fallback[0] = True
+
+        def guarded_run(agent, task, reset: bool = True):
+            try:
+                return agent.run(task, reset=reset)
+            except BudgetExceededError:
+                raise
+            except Exception as e:  # noqa: BLE001
+                if (
+                    fallback_base is not None
+                    and not used_fallback[0]
+                    and is_connection_error(e)
+                ):
+                    switch_to_fallback()
+                    return agent.run(task, reset=reset)
+                raise
+
+        draft = guarded_run(researcher, f"撰写研报：{topic}")
         verdict: dict | None = None
         rounds = 0
         for rounds in range(1, 3):  # 质检不过最多修订 2 轮
             verdict = None
             for _attempt in range(2):  # 解析失败重试一次
-                verdict = _extract_json(qa.run(f"请校验以下报告：\n\n{draft}"))
+                verdict = _extract_json(guarded_run(qa, f"请校验以下报告：\n\n{draft}", reset=False))
                 if verdict is not None:
                     break
             if verdict is None:
                 verdict = {"passed": False, "issues": ["质检输出不可解析"]}
             if verdict.get("passed"):
                 break
-            draft = researcher.run(
+            draft = guarded_run(
+                researcher,
                 f"质检反馈的问题：{json.dumps(verdict.get('issues', []), ensure_ascii=False)}"
                 "。请修订报告并重新输出完整 Markdown 报告。",
                 reset=False,
@@ -175,4 +198,6 @@ class ReportPipeline:
             "report": draft,
             "verdict": verdict,
             "revision_rounds": rounds,
+            "model_used": ("fallback" if used_fallback[0] else "primary"),
+            "budget_used_chars": primary.used_chars,
         }

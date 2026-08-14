@@ -1,18 +1,22 @@
 import { useEffect, useRef, useState } from "react";
 import {
   Alert,
+  Button,
   Card,
   Empty,
   Skeleton,
   Steps,
   Tag,
   Typography,
+  message,
 } from "antd";
+import { ReloadOutlined } from "@ant-design/icons";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
   getReportMd,
   getSession,
+  retrySession,
   streamEvents,
   SessionDetail as SessionDetailType,
 } from "../api";
@@ -35,6 +39,7 @@ export default function SessionDetail({
   const [reportMd, setReportMd] = useState("");
   const [events, setEvents] = useState<{ type: string; msg: string }[]>([]);
   const [loading, setLoading] = useState(true);
+  const [reloadKey, setReloadKey] = useState(0);
   const esRef = useRef<EventSource | null>(null);
 
   useEffect(() => {
@@ -90,7 +95,19 @@ export default function SessionDetail({
       cancelled = true;
       esRef.current?.close();
     };
-  }, [id]);
+  }, [id, reloadKey]);
+
+  const onRetry = async () => {
+    try {
+      await retrySession(id);
+      message.success("已重新入队");
+      setEvents([]);
+      setReportMd("");
+      setReloadKey((k) => k + 1);
+    } catch (e) {
+      message.error(String(e));
+    }
+  };
 
   const st = session ? STATUS_TAG[session.status] ?? STATUS_TAG.error : null;
   const current =
@@ -150,7 +167,20 @@ export default function SessionDetail({
             />
           )}
           {session?.status === "error" && (
-            <Alert type="error" message="任务失败" description={events.at(-1)?.msg} />
+            <Alert
+              type="error"
+              message="任务失败"
+              description={events.at(-1)?.msg}
+              action={
+                <Button
+                  size="small"
+                  icon={<ReloadOutlined />}
+                  onClick={onRetry}
+                >
+                  重试
+                </Button>
+              }
+            />
           )}
           {session?.status === "done" && session.report && (
             <Alert
