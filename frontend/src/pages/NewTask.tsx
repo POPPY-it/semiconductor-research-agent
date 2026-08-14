@@ -41,6 +41,7 @@ export default function NewTask({ onCreate }: { onCreate: (id: number) => void }
             <Radio.Button value="daily">日报</Radio.Button>
             <Radio.Button value="weekly">周报</Radio.Button>
             <Radio.Button value="deep">深度研报</Radio.Button>
+            <Radio.Button value="survey">学术调研</Radio.Button>
           </Radio.Group>
         </Form.Item>
         <Button

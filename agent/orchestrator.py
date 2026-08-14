@@ -55,6 +55,12 @@ REPORT_TEMPLATES = {
         "sections": "摘要/行业背景/公司分析/数据透视/风险与展望",
         "min_words": 600,
     },
+    "survey": {
+        "label": "学术调研",
+        "sections": "研究背景/代表工作与方法对比/趋势与开放问题/参考文献列表",
+        "min_words": 500,
+        "cite_format": "参考文献格式：[n] 论文标题（作者，年份）链接",
+    },
 }
 
 
@@ -133,23 +139,62 @@ class ReportPipeline:
                 ensure_ascii=False,
             )
 
-        return search_knowledge, query_filings
+        @tool
+        def search_arxiv(query: str, max_results: int = 5) -> str:
+            """实时检索 arXiv 学术论文（学术调研用）。
+
+            Args:
+                query: 英文检索词或短语，如 "LLM agent" 或 "chip design"。
+                max_results: 返回条数，默认 5。
+            """
+            import re as _re
+            import time as _time
+
+            import requests as _requests
+
+            _time.sleep(3.2)  # arXiv 官方限速：请求间隔 ≥ 3 秒
+            url = (
+                "https://export.arxiv.org/api/query?"
+                f"search_query=all:{_requests.utils.quote(query)}"
+                f"&sortBy=relevance&max_results={max_results}"
+            )
+            resp = _requests.get(url, timeout=20)
+            resp.raise_for_status()
+            import xml.etree.ElementTree as _ET
+
+            ns = {"a": "http://www.w3.org/2005/Atom"}
+            root = _ET.fromstring(resp.content)
+            lines = []
+            for e in root.findall("a:entry", ns):
+                title = _re.sub(r"\s+", " ", e.findtext("a:title", "", ns)).strip()
+                link = e.findtext("a:id", "", ns)
+                year = e.findtext("a:published", "", ns)[:4]
+                authors = ", ".join(
+                    a.findtext("a:name", "", ns) for a in e.findall("a:author", ns)[:4]
+                )
+                summary = _re.sub(r"\s+", " ", e.findtext("a:summary", "", ns)).strip()[:400]
+                lines.append(f"[{title}] ({authors}, {year}) {link}\n摘要: {summary}")
+            return "\n---\n".join(lines) or "（无结果）"
+
+        return search_knowledge, query_filings, search_arxiv
 
     def _build_agents(self, model, report_type: str = "weekly"):
-        search_knowledge, query_filings = self._make_tools()
+        search_knowledge, query_filings, search_arxiv = self._make_tools()
         template = REPORT_TEMPLATES.get(report_type, REPORT_TEMPLATES["weekly"])
         extra = (
             f"4) 按「{template['sections']}」分节；"
             f"5) 正文不少于 {template['min_words']} 字。"
         )
+        if template.get("cite_format"):
+            extra += f"6) {template['cite_format']}。"
         researcher = CodeAgent(
-            tools=[search_knowledge, query_filings],
+            tools=[search_knowledge, query_filings, search_arxiv],
             model=model,
             max_steps=12,
             instructions=RESEARCHER_INSTRUCTIONS.format(extra=extra),
         )
         qa = CodeAgent(
-            tools=[search_knowledge, query_filings],
+            tools=[search_knowledge, query_filings, search_arxiv],
             model=model,
             max_steps=8,
             instructions=QA_INSTRUCTIONS,
@@ -226,12 +271,12 @@ class ReportPipeline:
 
         问答预算为任务预算的 1/10，独立熔断。
         """
-        search_knowledge, query_filings = self._make_tools()
+        search_knowledge, query_filings, search_arxiv = self._make_tools()
         model = BudgetedModel(
             build_model(), budget_chars=max(100_000, settings.TOKEN_BUDGET_CHARS // 10)
         )
         qa_agent = CodeAgent(
-            tools=[search_knowledge, query_filings],
+            tools=[search_knowledge, query_filings, search_arxiv],
             model=model,
             max_steps=4,
             instructions=(
