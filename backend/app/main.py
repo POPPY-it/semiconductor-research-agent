@@ -19,7 +19,7 @@ from .core import settings
 from .db import SessionStore
 from .events import EventBus
 from .report_service import ReportService
-from .tasks import TaskQueue, ThreadPoolQueue
+from .tasks import RQQueue, TaskQueue, ThreadPoolQueue
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +61,10 @@ def create_app(
     )
 
     if queue is None:
-        queue = ThreadPoolQueue(max_workers=2)
+        if settings.APP_QUEUE == "rq":
+            queue = RQQueue(settings.REDIS_URL)  # 生产规模化路径（requirements-prod + Redis）
+        else:
+            queue = ThreadPoolQueue(max_workers=2)
     if service is None:
         service = ReportService(SessionStore(settings.DB_PATH), EventBus(), default_pipeline_factory)
     app.state.queue = queue

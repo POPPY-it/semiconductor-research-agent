@@ -17,6 +17,8 @@ class Settings:
     VECTOR_DIR: Path = ROOT / "data" / "vectorstore" / "main"
     MODEL_DIR: Path = ROOT / "data" / "models"
     REPORT_DIR: Path = ROOT / "reports" / "output"
+    APP_QUEUE: str = os.getenv("APP_QUEUE", "thread")  # thread | rq
+    REDIS_URL: str = os.getenv("REDIS_URL", "redis://127.0.0.1:6379/0")
 
     @classmethod
     def auth_enabled(cls) -> bool:

@@ -1,0 +1,13 @@
+.venv
+.git
+frontend/node_modules
+data/*.db
+data/vectorstore
+data/models
+reports/output
+publish-scripts
+smolagents-src
+.env
+docs
+spikes
+tests
