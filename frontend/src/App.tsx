@@ -1,9 +1,13 @@
 import { useEffect, useState } from "react";
-import { Tabs, message } from "antd";
+import { Tabs, message, Tag, Tooltip } from "antd";
 import {
   FileTextOutlined,
-  PlusOutlined,
-  QuestionCircleOutlined,
+  PlusCircleOutlined,
+  SearchOutlined,
+  HistoryOutlined,
+  ApiOutlined,
+  CheckCircleFilled,
+  SafetyCertificateOutlined
 } from "@ant-design/icons";
 import NewTask from "./pages/NewTask";
 import SessionsList from "./pages/SessionsList";
@@ -12,13 +16,12 @@ import QaPanel from "./pages/QaPanel";
 import { login } from "./api";
 
 export default function App() {
-  const [tab, setTab] = useState("new");
+  const [tab, setTab] = useState("qa");
   const [openId, setOpenId] = useState<number | null>(null);
   const [listTab, setListTab] = useState("list");
 
-  // 登录换取 HttpOnly Cookie（后续请求含 SSE 均自动携带）
   useEffect(() => {
-    login().catch(() => message.warning("登录失败，请检查 API token 配置"));
+    login().catch(() => message.warning("认证会话初始化失败，请检查 API Token 配置"));
   }, []);
 
   const openSession = (id: number) => {
@@ -28,21 +31,51 @@ export default function App() {
   };
 
   return (
-    <div>
-      <div className="app-header">
-        <FileTextOutlined />
-        半导体行业研报 Agent
-      </div>
-      <div className="app-content">
+    <div className="app-container">
+      <header className="app-navbar">
+        <div className="brand-section">
+          <div className="brand-logo-icon">
+            <ApiOutlined />
+          </div>
+          <div>
+            <div className="brand-title">
+              半导体研报与学术调研 Agent
+              <Tag color="blue" style={{ fontSize: 11, padding: "0 6px", height: 20, lineHeight: "18px", border: "none", fontWeight: 600 }}>
+                Enterprise v0.3.0
+              </Tag>
+            </div>
+            <div className="brand-subtitle">
+              Intelligent Semiconductor Research & Literature Analysis Platform
+            </div>
+          </div>
+        </div>
+
+        <div className="navbar-badges">
+          <div className="env-pill">
+            <span className="status-dot"></span>
+            <span>SEC EDGAR + arXiv 知识引擎就绪</span>
+          </div>
+          <Tooltip title="基于 smolagents CodeAgent + 事实质检编排引擎">
+            <div className="env-pill" style={{ cursor: "pointer" }}>
+              <SafetyCertificateOutlined style={{ color: "#38bdf8" }} />
+              <span>Multi-Agent QA</span>
+            </div>
+          </Tooltip>
+        </div>
+      </header>
+
+      <main className="app-main-content">
         <Tabs
+          className="custom-main-tabs"
           activeKey={tab}
           onChange={setTab}
+          size="middle"
           items={[
             {
               key: "qa",
               label: (
                 <span>
-                  <QuestionCircleOutlined /> 数据问答
+                  <SearchOutlined /> 智能数据问答
                 </span>
               ),
               children: <QaPanel />,
@@ -51,14 +84,18 @@ export default function App() {
               key: "new",
               label: (
                 <span>
-                  <PlusOutlined /> 新建任务
+                  <PlusCircleOutlined /> 新建研报任务
                 </span>
               ),
               children: <NewTask onCreate={openSession} />,
             },
             {
               key: "sessions",
-              label: "会话与报告",
+              label: (
+                <span>
+                  <HistoryOutlined /> 研报中心与历史
+                </span>
+              ),
               children:
                 listTab === "list" ? (
                   <SessionsList onOpen={openSession} />
@@ -68,7 +105,11 @@ export default function App() {
             },
           ]}
         />
-      </div>
+      </main>
+
+      <footer className="app-footer">
+        半导体行业研报与学术调研 Agent &copy; 2026 &middot; 具备自建数据管道、混合检索与事实质检的高可信研究平台
+      </footer>
     </div>
   );
 }
