@@ -47,7 +47,10 @@ def char_bigram_tokenize(text: str) -> list[str]:
 
 
 class HybridRetriever:
-    """对一批文档建立 BM25 与向量双索引，支持三种检索模式。"""
+    """对一批文档建立 BM25 与向量双索引，支持多模式检索与重排。
+
+    W4 升级：加权 RRF（W2 实测等权融合稀释 BM25 信号）+ 可选 reranker 精排。
+    """
 
     def __init__(
         self,
@@ -55,11 +58,17 @@ class HybridRetriever:
         embedder: Embedder,
         store: VectorStore,
         rrf_k: int = 60,
+        bm25_weight: float = 0.7,
+        vector_weight: float = 0.3,
+        reranker=None,
     ):
         self.documents = {d.doc_id: d for d in documents}
         self.embedder = embedder
         self.store = store
         self.rrf_k = rrf_k
+        self.bm25_weight = bm25_weight
+        self.vector_weight = vector_weight
+        self.reranker = reranker
         self._bm25: BM25Okapi | None = None
         self._indexed = False
 
@@ -87,12 +96,27 @@ class HybridRetriever:
         hits = self.store.search(qv, top_k)
         return [(h.doc_id, h.score) for h in hits]
 
-    def search_hybrid(self, query: str, top_k: int = 10) -> list[tuple[str, float]]:
-        bm25 = self.search_bm25(query, top_k=50)
-        vec = self.search_vector(query, top_k=50)
+    def search_hybrid(
+        self, query: str, top_k: int = 10, candidates: int = 50
+    ) -> list[tuple[str, float]]:
+        """加权 RRF 融合：默认 BM25 0.7 / 向量 0.3（W2 实测结论）。"""
+        bm25 = self.search_bm25(query, top_k=candidates)
+        vec = self.search_vector(query, top_k=candidates)
         rrf: dict[str, float] = {}
         for rank, (doc_id, _score) in enumerate(bm25):
-            rrf[doc_id] = rrf.get(doc_id, 0.0) + 1.0 / (self.rrf_k + rank + 1)
+            rrf[doc_id] = rrf.get(doc_id, 0.0) + self.bm25_weight / (self.rrf_k + rank + 1)
         for rank, (doc_id, _score) in enumerate(vec):
-            rrf[doc_id] = rrf.get(doc_id, 0.0) + 1.0 / (self.rrf_k + rank + 1)
+            rrf[doc_id] = rrf.get(doc_id, 0.0) + self.vector_weight / (self.rrf_k + rank + 1)
         return sorted(rrf.items(), key=lambda kv: kv[1], reverse=True)[:top_k]
+
+    def search_reranked(
+        self, query: str, top_k: int = 10, candidates: int = 30
+    ) -> list[tuple[str, float]]:
+        """混合召回 + cross-encoder 精排。"""
+        if self.reranker is None:
+            return self.search_hybrid(query, top_k)
+        cands = self.search_hybrid(query, top_k=candidates)
+        texts = [self.documents[doc_id].text for doc_id, _ in cands]
+        scores = self.reranker.rerank(query, texts)
+        ranked = sorted(zip([d for d, _ in cands], scores), key=lambda kv: kv[1], reverse=True)
+        return [(doc_id, float(s)) for doc_id, s in ranked[:top_k]]

@@ -1,0 +1,37 @@
+[
+  {
+    "name": "BM25-only",
+    "queries": 7,
+    "recall@5_mean": 0.355,
+    "mrr_mean": 0.643,
+    "latency_ms_mean": 0.4
+  },
+  {
+    "name": "Vector-only",
+    "queries": 7,
+    "recall@5_mean": 0.298,
+    "mrr_mean": 0.5,
+    "latency_ms_mean": 4.6
+  },
+  {
+    "name": "RRF-uniform",
+    "queries": 7,
+    "recall@5_mean": 0.337,
+    "mrr_mean": 0.679,
+    "latency_ms_mean": 4.8
+  },
+  {
+    "name": "RRF-weighted(0.7/0.3)",
+    "queries": 7,
+    "recall@5_mean": 0.337,
+    "mrr_mean": 0.619,
+    "latency_ms_mean": 5.2
+  },
+  {
+    "name": "RRF+reranker",
+    "queries": 7,
+    "recall@5_mean": 0.391,
+    "mrr_mean": 0.643,
+    "latency_ms_mean": 5631.6
+  }
+]

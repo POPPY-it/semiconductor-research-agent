@@ -73,6 +73,9 @@ python -m venv .venv
 - [x] W2 技术预研（RAG 评测 `docs/w2-spike-report.md`、SSE 流式 `backend/app/main.py`、队列选型）
 - [x] **博客②已发布**：[RAG 检索链路实测：BM25 vs 向量 vs 混合](https://juejin.cn/post/7673810995882524672)
 - [x] W3 M1 数据管道：适配器接口 + 重试 + SQLite 去重入库 + 采集日志 + APScheduler 定时
-- [ ] W4 M2 RAG 落地（加权 RRF + reranker）+ M3 多 Agent 编排 → W5-7 服务层/前端/上线
+- [x] W4 M2 RAG 落地（长文档语料 + 分块 + 加权 RRF + reranker，评测见 `docs/w4-m2m3-report.md`）
+- [x] W4 M3 多 Agent 编排（研究/质检/修订循环，实测生成带引用周报）
+- [x] **博客③已发布**：[多 Agent 协作与质检链路](https://juejin.cn/post/7673807945507242018)
+- [ ] W5 M4 研报模板 + M5 服务层完整化 → W6-7 前端/上线
 
 详细计划见 [PLAN.md](PLAN.md)。
