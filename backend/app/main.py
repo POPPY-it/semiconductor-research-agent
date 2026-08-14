@@ -57,6 +57,7 @@ class LoginRequest(BaseModel):
 
 class QuestionRequest(BaseModel):
     question: str = Field(..., min_length=2, max_length=500)
+    conversation_id: int | None = Field(default=None)
 
 
 def create_app(
@@ -158,8 +159,24 @@ def create_app(
 
     @app.post("/api/v1/qa", dependencies=[Depends(require_auth)])
     async def ask_question(req: QuestionRequest = Body(...)):
-        """财报/行业数据问答（同步，轻量预算）。"""
-        return service.qa(req.question)
+        """多轮问答：可携带 conversation_id 复用历史上下文；首次提问自动建会话。"""
+        store = service.store
+        conversation_id = req.conversation_id
+        if conversation_id is None:
+            conversation_id = store.create_conversation(req.question)
+        history = store.get_qa_history(conversation_id)
+        result = service.qa(req.question, history=history)
+        store.add_qa_message(conversation_id, "user", req.question)
+        store.add_qa_message(conversation_id, "assistant", result["answer"], result["sources"])
+        return {**result, "conversation_id": conversation_id}
+
+    @app.get("/api/v1/qa/conversations", dependencies=[Depends(require_auth)])
+    async def list_conversations():
+        return {"conversations": service.store.list_conversations()}
+
+    @app.get("/api/v1/qa/conversations/{conversation_id}", dependencies=[Depends(require_auth)])
+    async def get_conversation(conversation_id: int):
+        return {"messages": service.store.get_qa_history(conversation_id)}
 
     @app.post("/api/v1/documents", dependencies=[Depends(require_auth)])
     async def upload_document(file: UploadFile = File(...)):

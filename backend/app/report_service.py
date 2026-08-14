@@ -115,12 +115,12 @@ class ReportService:
             self.bus.publish(session_id, {"type": "error", "data": {"message": str(e)[:500]}})
             metrics.inc("report_tasks_total", ("error",))
 
-    def qa(self, question: str) -> dict:
-        """同步问答（轻量任务，直接跑在请求线程；预算独立熔断）。"""
+    def qa(self, question: str, history: list[dict] | None = None) -> dict:
+        """同步问答（轻量任务，直接跑在请求线程；预算独立熔断；支持多轮上下文）。"""
         t0 = time.time()
         with self._lock:
             pipeline = self._ensure_pipeline_locked()
-            result = pipeline.answer_question(question)
+            result = pipeline.answer_question(question, history=history)
         metrics.inc("qa_requests_total")
         metrics.inc("qa_duration_ms_sum", ("",), int((time.time() - t0) * 1000))
         metrics.inc("qa_count", ())

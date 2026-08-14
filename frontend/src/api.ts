@@ -64,13 +64,37 @@ export interface QaResult {
   question: string;
   answer: string;
   sources: { title: string; url: string }[];
+  conversation_id?: number;
 }
 
-export function askQuestion(question: string) {
+export function askQuestion(question: string, conversationId?: number) {
   return request<QaResult>("/api/v1/qa", {
     method: "POST",
-    body: JSON.stringify({ question }),
+    body: JSON.stringify({ question, conversation_id: conversationId ?? null }),
   });
+}
+
+export interface ConversationSummary {
+  id: number;
+  title: string;
+  created_at: string;
+  msg_count: number;
+}
+
+export interface QaMessage {
+  role: string;
+  content: string;
+  sources: { title: string; url: string }[];
+}
+
+export function listConversations() {
+  return request<{ conversations: ConversationSummary[] }>(
+    "/api/v1/qa/conversations"
+  );
+}
+
+export function getConversation(id: number) {
+  return request<{ messages: QaMessage[] }>(`/api/v1/qa/conversations/${id}`);
 }
 
 export async function uploadDocument(file: File) {

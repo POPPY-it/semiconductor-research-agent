@@ -24,6 +24,19 @@ CREATE TABLE IF NOT EXISTS reports (
     report_md TEXT DEFAULT '',
     created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS qa_conversations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL DEFAULT '新对话',
+    created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS qa_messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    conversation_id INTEGER NOT NULL,
+    role TEXT NOT NULL,
+    content TEXT NOT NULL,
+    sources TEXT DEFAULT '[]',
+    created_at TEXT NOT NULL
+);
 """
 
 STATUS_QUEUED = "queued"
@@ -130,3 +143,43 @@ class SessionStore:
 
     def close(self) -> None:
         self._conn.close()
+
+    # ---- 多轮问答会话（P1）----
+
+    def create_conversation(self, title: str) -> int:
+        with self._lock:
+            cur = self._conn.execute(
+                "INSERT INTO qa_conversations (title, created_at) VALUES (?, datetime('now','localtime'))",
+                (title[:60] or "新对话",),
+            )
+        return cur.lastrowid
+
+    def add_qa_message(self, conversation_id: int, role: str, content: str, sources: list | None = None) -> None:
+        with self._lock:
+            self._conn.execute(
+                "INSERT INTO qa_messages (conversation_id, role, content, sources, created_at) "
+                "VALUES (?, ?, ?, ?, datetime('now','localtime'))",
+                (conversation_id, role, content, json.dumps(sources or [], ensure_ascii=False)),
+            )
+
+    def get_qa_history(self, conversation_id: int, limit: int = 20) -> list[dict]:
+        rows = self._conn.execute(
+            "SELECT role, content, sources FROM qa_messages WHERE conversation_id = ? ORDER BY id DESC LIMIT ?",
+            (conversation_id, limit),
+        ).fetchall()
+        return [
+            {"role": r[0], "content": r[1], "sources": json.loads(r[2] or "[]")}
+            for r in reversed(rows)
+        ]
+
+    def list_conversations(self, limit: int = 50) -> list[dict]:
+        rows = self._conn.execute(
+            "SELECT c.id, c.title, c.created_at, "
+            "(SELECT COUNT(*) FROM qa_messages m WHERE m.conversation_id = c.id) AS msg_count "
+            "FROM qa_conversations c ORDER BY c.id DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        return [
+            {"id": r[0], "title": r[1], "created_at": r[2], "msg_count": r[3]}
+            for r in rows
+        ]

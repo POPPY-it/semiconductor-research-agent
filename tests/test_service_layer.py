@@ -29,7 +29,7 @@ class FakePipeline:
             "budget_used_chars": 100,
         }
 
-    def answer_question(self, question):
+    def answer_question(self, question, history=None):
         return {
             "question": question,
             "answer": "这是假答案：42",

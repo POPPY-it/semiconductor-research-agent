@@ -49,7 +49,7 @@ def make_app(tmp_path, token="test-token-1"):
                 "budget_used_chars": 100,
             }
 
-        def answer_question(self, question):
+        def answer_question(self, question, history=None):
             return {
                 "question": question,
                 "answer": "假答案",
@@ -125,8 +125,30 @@ def test_qa_endpoint(tmp_path):
     data = resp.json()
     assert data["answer"] == "假答案"
     assert data["sources"][0]["url"] == "https://example.com/x"
+    assert data["conversation_id"] > 0
     # 未认证 → 401
     assert client.post("/api/v1/qa", json={"question": "x?"}).status_code == 401
+
+
+def test_multi_turn_conversation(tmp_path):
+    client = TestClient(make_app(tmp_path))
+    headers = {"X-API-Token": "test-token-1"}
+    # 第一问：自动建会话
+    r1 = client.post("/api/v1/qa", json={"question": "台积电营收？"}, headers=headers).json()
+    conv_id = r1["conversation_id"]
+    # 追问：携带 conversation_id
+    r2 = client.post(
+        "/api/v1/qa",
+        json={"question": "那 ASML 呢？", "conversation_id": conv_id},
+        headers=headers,
+    ).json()
+    assert r2["conversation_id"] == conv_id
+    # 会话历史应有 4 条（2 问 2 答）
+    msgs = client.get(f"/api/v1/qa/conversations/{conv_id}", headers=headers).json()["messages"]
+    assert [m["role"] for m in msgs] == ["user", "assistant", "user", "assistant"]
+    # 会话列表包含该会话
+    convs = client.get("/api/v1/qa/conversations", headers=headers).json()["conversations"]
+    assert any(c["id"] == conv_id for c in convs)
 
 
 def test_upload_document_endpoint(tmp_path):

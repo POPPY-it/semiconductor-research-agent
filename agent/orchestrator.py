@@ -266,10 +266,10 @@ class ReportPipeline:
             "budget_used_chars": primary.used_chars,
         }
 
-    def answer_question(self, question: str) -> dict:
-        """财报/行业数据问答（W8 新入口）：轻量 Agent + 直接检索附加参考来源。
+    def answer_question(self, question: str, history: list[dict] | None = None) -> dict:
+        """财报/行业/学术问答（P1：多轮上下文）。
 
-        问答预算为任务预算的 1/10，独立熔断。
+        问答预算为任务预算的 1/10，独立熔断；history 提供最近几轮 Q/A 用于指代消解。
         """
         search_knowledge, query_filings, search_arxiv = self._make_tools()
         model = BudgetedModel(
@@ -280,12 +280,26 @@ class ReportPipeline:
             model=model,
             max_steps=4,
             instructions=(
-                "你是半导体行业数据助手。只能依据检索工具的结果回答，禁止编造。\n"
+                "你是半导体行业与学术研究助手。只能依据检索工具的结果回答，禁止编造。\n"
                 "要求：1) 中文回答，简明扼要（300 字内）；2) 关键数字后标注来源链接；"
-                "3) 检索不到就明确回答「知识库中没有相关数据」，不要猜测。"
+                "3) 检索不到就明确回答「知识库中没有相关数据」，不要猜测；"
+                "4) 若问题含指代（如「它」「那家」「继续」），结合对话历史理解其指向。"
             ),
         )
-        answer = str(qa_agent.run(question))
+        context = ""
+        if history:
+            lines = []
+            for h in history[-8:]:
+                role = h.get("role")
+                content = str(h.get("content", ""))[:300]
+                if role == "user":
+                    lines.append(f"问：{content}")
+                elif role == "assistant":
+                    lines.append(f"答：{content}")
+            if lines:
+                context = "对话历史（仅用于理解上下文与指代，不得重复历史答案）：\n" + "\n\n".join(lines) + "\n\n"
+        task = context + f"当前问题：{question}"
+        answer = str(qa_agent.run(task))
         sources = []
         seen = set()
         for doc_id, _score in self.retriever.search_hybrid(question, top_k=5):
