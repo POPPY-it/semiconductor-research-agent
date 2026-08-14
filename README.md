@@ -1,5 +1,6 @@
 # 半导体行业研报 Agent（Semiconductor Research Agent）
 
+> GitHub：https://github.com/POPPY-it/semiconductor-research-agent
 > 秋招项目：基于 [smolagents](https://github.com/huggingface/smolagents)（Apache-2.0）内核二次开发的
 > **行业研报自动生成系统**——从数据采集、RAG 知识库、多 Agent 协作，到研报产出与上线部署的全栈产品。
 >
