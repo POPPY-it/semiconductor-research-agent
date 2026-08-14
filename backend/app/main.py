@@ -1,85 +1,111 @@
-"""服务层预研版（W2）：FastAPI + SSE 流式执行 Agent。
+"""服务层 API（M5）：会话 + 任务队列 + SSE 事件流 + 鉴权。
 
-验证目标：`agent.run(stream=True)` 生成器 → sse-starlette → 前端逐步收到执行过程。
-W5 将在此基础上加：任务队列、会话管理、鉴权、历史存储。
+架构：app 工厂（可注入测试依赖）→ ReportService 在任务队列 worker 中运行编排器
+→ EventBus 把阶段事件推给 SSE 订阅者。
 """
-import json
-import os
-from pathlib import Path
+from __future__ import annotations
 
-from dotenv import load_dotenv
-from fastapi import FastAPI
-from pydantic import BaseModel
+import json
+import logging
+from pathlib import Path
+from typing import Callable
+
+from fastapi import Body, Depends, FastAPI, Header, HTTPException
+from pydantic import BaseModel, Field
 from sse_starlette.sse import EventSourceResponse
 
-ROOT = Path(__file__).resolve().parents[2]
-load_dotenv(ROOT / ".env")
+from .core import settings
+from .db import SessionStore
+from .events import EventBus
+from .report_service import ReportService
+from .tasks import TaskQueue, ThreadPoolQueue
 
-from smolagents import CodeAgent, OpenAIModel, tool  # noqa: E402
-
-app = FastAPI(title="Semiconductor Research Agent API")
+logger = logging.getLogger(__name__)
 
 
-@tool
-def get_semiconductor_news(date: str) -> str:
-    """查询指定日期（YYYY-MM-DD）的半导体行业新闻摘要，返回带具体数字的中文要点。
+def default_pipeline_factory():
+    """生产接线：知识库（含模型）懒加载，全局复用。"""
+    import sys
 
-    Args:
-        date: 要查询的日期，格式为 YYYY-MM-DD。
-    """
-    return (
-        f"{date} 半导体快讯：台积电 2nm 产能爬坡超预期，预计 2026 年量产；"
-        "SEMI 上调 2025 年全球半导体设备支出预期至 1200 亿美元。"
+    ROOT = Path(__file__).resolve().parents[2]
+    if str(ROOT) not in sys.path:
+        sys.path.insert(0, str(ROOT))
+    from agent.knowledge.loader import build_retriever
+    from agent.orchestrator import ReportPipeline
+    from data.storage import SQLiteStore
+
+    retriever = build_retriever(
+        settings.ARTICLES_DB, settings.VECTOR_DIR, settings.MODEL_DIR
     )
+    store = SQLiteStore(settings.ARTICLES_DB)
+    return ReportPipeline(retriever, store)
 
 
-_model = OpenAIModel(
-    model_id=os.getenv("DEEPSEEK_MODEL", "deepseek-chat"),
-    api_base=os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com"),
-    api_key=os.environ["DEEPSEEK_API_KEY"],
-)
+class SessionCreate(BaseModel):
+    topic: str = Field(..., min_length=4, max_length=500)
+    report_type: str = Field("weekly", pattern="^(daily|weekly|deep)$")
 
 
-def get_agent() -> CodeAgent:
-    return CodeAgent(tools=[get_semiconductor_news], model=_model, max_steps=8)
+def create_app(
+    queue: TaskQueue | None = None,
+    service: ReportService | None = None,
+) -> FastAPI:
+    app = FastAPI(title="Semiconductor Research Agent API", version="0.2.0")
+
+    if queue is None:
+        queue = ThreadPoolQueue(max_workers=2)
+    if service is None:
+        service = ReportService(SessionStore(settings.DB_PATH), EventBus(), default_pipeline_factory)
+    app.state.queue = queue
+    app.state.service = service
+
+    async def require_token(x_api_token: str | None = Header(default=None)) -> None:
+        if settings.auth_enabled() and x_api_token != settings.API_TOKEN:
+            raise HTTPException(status_code=401, detail="invalid or missing X-API-Token")
+
+    @app.get("/api/health")
+    async def health():
+        return {"status": "ok", "auth_enabled": settings.auth_enabled()}
+
+    @app.post("/api/v1/sessions", dependencies=[Depends(require_token)])
+    async def create_session(req: SessionCreate = Body(...)):
+        session_id = service.store.create(req.topic, req.report_type)
+        task_id = queue.submit(service.run, session_id, req.topic, req.report_type)
+        return {"session_id": session_id, "task_id": task_id}
+
+    @app.get("/api/v1/sessions", dependencies=[Depends(require_token)])
+    async def list_sessions(limit: int = 20):
+        return {"sessions": service.store.list(limit=limit)}
+
+    @app.get("/api/v1/sessions/{session_id}", dependencies=[Depends(require_token)])
+    async def get_session(session_id: int):
+        data = service.store.get(session_id)
+        if data is None:
+            raise HTTPException(status_code=404, detail="session not found")
+        return data
+
+    @app.get("/api/v1/sessions/{session_id}/events", dependencies=[Depends(require_token)])
+    async def stream_events(session_id: int):
+        if service.store.get(session_id) is None:
+            raise HTTPException(status_code=404, detail="session not found")
+
+        def gen():
+            sub = service.bus.subscribe(session_id)
+            try:
+                while True:
+                    ev = sub.next_event(timeout=20.0)
+                    if ev is None:
+                        yield {"event": "keepalive", "data": "{}"}
+                        continue
+                    yield {"event": ev["type"], "data": json.dumps(ev.get("data", {}), ensure_ascii=False)}
+                    if ev["type"] in ("done", "error"):
+                        break
+            finally:
+                sub.close()
+
+        return EventSourceResponse(gen(), ping=15)
+
+    return app
 
 
-class TaskRequest(BaseModel):
-    task: str
-
-
-def _clean(value, limit: int = 2000) -> str | None:
-    if value is None:
-        return None
-    if hasattr(value, "content"):
-        value = value.content
-    return str(value)[:limit]
-
-
-def serialize_step(step) -> dict:
-    """把 smolagents run(stream=True) 产出的各类步骤对象转为可 JSON 化的字典。"""
-    data: dict = {"kind": type(step).__name__}
-    for attr in ("step_number", "output", "model_output", "action_output", "error"):
-        if hasattr(step, attr):
-            val = _clean(getattr(step, attr))
-            if val:
-                data[attr] = val
-    return data
-
-
-@app.post("/api/agent/stream")
-async def agent_stream(req: TaskRequest):
-    agent = get_agent()
-
-    def gen():
-        yield {"event": "task", "data": json.dumps({"task": req.task}, ensure_ascii=False)}
-        for step in agent.run(req.task, stream=True):
-            yield {"event": "step", "data": json.dumps(serialize_step(step), ensure_ascii=False)}
-        yield {"event": "done", "data": "{}"}
-
-    return EventSourceResponse(gen())
-
-
-@app.get("/api/health")
-async def health():
-    return {"status": "ok"}
+app = create_app()

@@ -30,18 +30,42 @@ MODEL = OpenAIModel(
 
 RESEARCHER_INSTRUCTIONS = (
     "你是半导体行业资深研究员。只能基于工具检索到的资料撰写报告，禁止编造。\n"
-    "要求：1) 用 Markdown 分节（概述/关键动态/数据透视/展望）；2) 每个关键数字或论断"
-    "必须注明来源链接；3) 中文，正文不少于 400 字。"
+    "要求：1) 用 Markdown 分节；2) 每个关键数字或论断必须注明来源链接；3) 中文。"
+    "{extra}"
 )
 
 QA_INSTRUCTIONS = (
     "你是事实质检员。校验给定报告的每个数字与论断是否能被检索结果支持。\n"
-    "只输出一个 JSON 对象，格式：{\"passed\": true/false, \"issues\": [\"问题1\",\"问题2\"]}"
-    "，不要输出其他任何内容。"
+    "最终必须调用 final_answer 并直接传入 dict（不要输出任何文字说明），例如：\n"
+    "final_answer({\"passed\": true, \"issues\": [\"问题1\",\"问题2\"]})"
 )
 
+# M4：研报类型模板（结构要求 + 篇幅底线）
+REPORT_TEMPLATES = {
+    "daily": {
+        "label": "日报",
+        "sections": "今日要闻/关键数据/一句话点评",
+        "min_words": 300,
+    },
+    "weekly": {
+        "label": "周报",
+        "sections": "概述/关键动态/数据透视/展望",
+        "min_words": 400,
+    },
+    "deep": {
+        "label": "深度研报",
+        "sections": "摘要/行业背景/公司分析/数据透视/风险与展望",
+        "min_words": 600,
+    },
+}
 
-def _extract_json(text: str) -> dict | None:
+
+def _extract_json(text) -> dict | None:
+    """质检输出可能是 dict（final_answer 直接传对象）或包裹在文字里的 JSON 字符串。"""
+    if isinstance(text, dict):
+        return text
+    if not isinstance(text, str):
+        text = str(text)
     m = re.search(r"\{.*\}", text, flags=re.S)
     if not m:
         return None
@@ -95,13 +119,18 @@ class ReportPipeline:
 
         return search_knowledge, query_filings
 
-    def _build_agents(self):
+    def _build_agents(self, report_type: str = "weekly"):
         search_knowledge, query_filings = self._make_tools()
+        template = REPORT_TEMPLATES.get(report_type, REPORT_TEMPLATES["weekly"])
+        extra = (
+            f"4) 按「{template['sections']}」分节；"
+            f"5) 正文不少于 {template['min_words']} 字。"
+        )
         researcher = CodeAgent(
             tools=[search_knowledge, query_filings],
             model=MODEL,
             max_steps=12,
-            instructions=RESEARCHER_INSTRUCTIONS,
+            instructions=RESEARCHER_INSTRUCTIONS.format(extra=extra),
         )
         qa = CodeAgent(
             tools=[search_knowledge, query_filings],
@@ -111,14 +140,20 @@ class ReportPipeline:
         )
         return researcher, qa
 
-    def generate(self, topic: str, output_dir: str | Path | None = None) -> dict:
-        researcher, qa = self._build_agents()
+    def generate(
+        self, topic: str, output_dir: str | Path | None = None, report_type: str = "weekly"
+    ) -> dict:
+        researcher, qa = self._build_agents(report_type)
 
         draft = researcher.run(f"撰写研报：{topic}")
         verdict: dict | None = None
         rounds = 0
         for rounds in range(1, 3):  # 质检不过最多修订 2 轮
-            verdict = _extract_json(qa.run(f"请校验以下报告：\n\n{draft}"))
+            verdict = None
+            for _attempt in range(2):  # 解析失败重试一次
+                verdict = _extract_json(qa.run(f"请校验以下报告：\n\n{draft}"))
+                if verdict is not None:
+                    break
             if verdict is None:
                 verdict = {"passed": False, "issues": ["质检输出不可解析"]}
             if verdict.get("passed"):
@@ -132,7 +167,7 @@ class ReportPipeline:
         out_dir = Path(output_dir) if output_dir else ROOT / "reports" / "output"
         out_dir.mkdir(parents=True, exist_ok=True)
         stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        out_path = out_dir / f"report_{stamp}.md"
+        out_path = out_dir / f"report_{report_type}_{stamp}.md"
         out_path.write_text(draft, encoding="utf-8")
 
         return {
