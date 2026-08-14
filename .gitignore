@@ -1,0 +1,30 @@
+# --- 敏感信息 ---
+.env
+*.local
+
+# --- Python ---
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# --- 前端 ---
+node_modules/
+dist/
+build/
+
+# --- 数据与产物 ---
+data/*.db
+data/*.sqlite3
+reports/output/
+*.log
+
+# --- 源码参考（本地精读用，不作为本仓库代码提交） ---
+smolagents-src/
+
+# --- 编辑器 ---
+.idea/
+.vscode/

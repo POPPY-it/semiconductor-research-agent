@@ -1,0 +1,293 @@
+{
+  "collected_at": "2026-08-14 13:51:58",
+  "filings": [
+    {
+      "company": "NVIDIA CORP",
+      "cik": "0001045810",
+      "form": "8-K",
+      "filing_date": "2026-07-02",
+      "report_date": "2026-06-28",
+      "accession": "0001045810-26-000060",
+      "document_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000060/nvda-20260628.htm"
+    },
+    {
+      "company": "NVIDIA CORP",
+      "cik": "0001045810",
+      "form": "8-K",
+      "filing_date": "2026-06-30",
+      "report_date": "2026-06-24",
+      "accession": "0001045810-26-000056",
+      "document_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000056/nvda-20260624.htm"
+    },
+    {
+      "company": "NVIDIA CORP",
+      "cik": "0001045810",
+      "form": "8-K",
+      "filing_date": "2026-06-18",
+      "report_date": "2026-06-15",
+      "accession": "0001193125-26-275783",
+      "document_url": "https://www.sec.gov/Archives/edgar/data/1045810/000119312526275783/d48176d8k.htm"
+    },
+    {
+      "company": "NVIDIA CORP",
+      "cik": "0001045810",
+      "form": "10-Q",
+      "filing_date": "2026-05-20",
+      "report_date": "2026-04-26",
+      "accession": "0001045810-26-000052",
+      "document_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000052/nvda-20260426.htm"
+    },
+    {
+      "company": "NVIDIA CORP",
+      "cik": "0001045810",
+      "form": "8-K",
+      "filing_date": "2026-05-20",
+      "report_date": "2026-05-20",
+      "accession": "0001045810-26-000051",
+      "document_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000051/nvda-20260520.htm"
+    },
+    {
+      "company": "NVIDIA CORP",
+      "cik": "0001045810",
+      "form": "8-K",
+      "filing_date": "2026-05-08",
+      "report_date": "2026-05-07",
+      "accession": "0001045810-26-000028",
+      "document_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000028/nvda-20260507.htm"
+    },
+    {
+      "company": "NVIDIA CORP",
+      "cik": "0001045810",
+      "form": "8-K",
+      "filing_date": "2026-04-27",
+      "report_date": "2026-04-24",
+      "accession": "0001045810-26-000026",
+      "document_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000026/nvda-20260424.htm"
+    },
+    {
+      "company": "NVIDIA CORP",
+      "cik": "0001045810",
+      "form": "8-K",
+      "filing_date": "2026-03-06",
+      "report_date": "2026-03-02",
+      "accession": "0001045810-26-000024",
+      "document_url": "https://www.sec.gov/Archives/edgar/data/1045810/000104581026000024/nvda-20260302.htm"
+    },
+    {
+      "company": "TAIWAN SEMICONDUCTOR MANUFACTURING CO LTD",
+      "cik": "0001046179",
+      "form": "6-K",
+      "filing_date": "2026-08-11",
+      "report_date": "2026-08-11",
+      "accession": "0001046179-26-000539",
+      "document_url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617926000539/sonysemiconductorsolutions.htm"
+    },
+    {
+      "company": "TAIWAN SEMICONDUCTOR MANUFACTURING CO LTD",
+      "cik": "0001046179",
+      "form": "6-K",
+      "filing_date": "2026-08-11",
+      "report_date": "2026-08-11",
+      "accession": "0001046179-26-000536",
+      "document_url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617926000536/tsm-boardx20260811.htm"
+    },
+    {
+      "company": "TAIWAN SEMICONDUCTOR MANUFACTURING CO LTD",
+      "cik": "0001046179",
+      "form": "6-K",
+      "filing_date": "2026-08-10",
+      "report_date": "2026-07-31",
+      "accession": "0001046179-26-000471",
+      "document_url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617926000471/tsm-revenue20260810.htm"
+    },
+    {
+      "company": "TAIWAN SEMICONDUCTOR MANUFACTURING CO LTD",
+      "cik": "0001046179",
+      "form": "6-K",
+      "filing_date": "2026-07-24",
+      "report_date": "2026-06-30",
+      "accession": "0001046179-26-000459",
+      "document_url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617926000459/tsm-monthend6kx20260724.htm"
+    },
+    {
+      "company": "TAIWAN SEMICONDUCTOR MANUFACTURING CO LTD",
+      "cik": "0001046179",
+      "form": "6-K",
+      "filing_date": "2026-07-16",
+      "report_date": "2026-06-30",
+      "accession": "0001046179-26-000451",
+      "document_url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617926000451/tsm-20260716x6k.htm"
+    },
+    {
+      "company": "TAIWAN SEMICONDUCTOR MANUFACTURING CO LTD",
+      "cik": "0001046179",
+      "form": "6-K",
+      "filing_date": "2026-07-13",
+      "report_date": "2026-06-30",
+      "accession": "0001046179-26-000447",
+      "document_url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617926000447/tsm-revenue20260713.htm"
+    },
+    {
+      "company": "TAIWAN SEMICONDUCTOR MANUFACTURING CO LTD",
+      "cik": "0001046179",
+      "form": "6-K",
+      "filing_date": "2026-07-02",
+      "report_date": "2026-07-02",
+      "accession": "0001046179-26-000381",
+      "document_url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617926000381/a20260702changeofaztreasur.htm"
+    },
+    {
+      "company": "TAIWAN SEMICONDUCTOR MANUFACTURING CO LTD",
+      "cik": "0001046179",
+      "form": "6-K",
+      "filing_date": "2026-06-25",
+      "report_date": "2026-05-31",
+      "accession": "0001046179-26-000377",
+      "document_url": "https://www.sec.gov/Archives/edgar/data/1046179/000104617926000377/tsm-monthend6kx20260625.htm"
+    },
+    {
+      "company": "INTEL CORP",
+      "cik": "0000050863",
+      "form": "8-K",
+      "filing_date": "2026-08-12",
+      "report_date": "2026-08-10",
+      "accession": "0001193125-26-346806",
+      "document_url": "https://www.sec.gov/Archives/edgar/data/50863/000119312526346806/d117670d8k.htm"
+    },
+    {
+      "company": "INTEL CORP",
+      "cik": "0000050863",
+      "form": "10-Q",
+      "filing_date": "2026-07-24",
+      "report_date": "2026-06-27",
+      "accession": "0000050863-26-000157",
+      "document_url": "https://www.sec.gov/Archives/edgar/data/50863/000005086326000157/intc-20260627.htm"
+    },
+    {
+      "company": "INTEL CORP",
+      "cik": "0000050863",
+      "form": "8-K",
+      "filing_date": "2026-07-23",
+      "report_date": "2026-07-23",
+      "accession": "0000050863-26-000155",
+      "document_url": "https://www.sec.gov/Archives/edgar/data/50863/000005086326000155/intc-20260723.htm"
+    },
+    {
+      "company": "INTEL CORP",
+      "cik": "0000050863",
+      "form": "8-K",
+      "filing_date": "2026-05-15",
+      "report_date": "2026-05-13",
+      "accession": "0000050863-26-000118",
+      "document_url": "https://www.sec.gov/Archives/edgar/data/50863/000005086326000118/intc-20260513.htm"
+    },
+    {
+      "company": "INTEL CORP",
+      "cik": "0000050863",
+      "form": "8-K",
+      "filing_date": "2026-04-30",
+      "report_date": "2026-04-30",
+      "accession": "0001193125-26-197845",
+      "document_url": "https://www.sec.gov/Archives/edgar/data/50863/000119312526197845/d143782d8k.htm"
+    },
+    {
+      "company": "INTEL CORP",
+      "cik": "0000050863",
+      "form": "8-K",
+      "filing_date": "2026-04-24",
+      "report_date": "2026-04-24",
+      "accession": "0000050863-26-000083",
+      "document_url": "https://www.sec.gov/Archives/edgar/data/50863/000005086326000083/intc-20260424.htm"
+    },
+    {
+      "company": "INTEL CORP",
+      "cik": "0000050863",
+      "form": "10-Q",
+      "filing_date": "2026-04-24",
+      "report_date": "2026-03-28",
+      "accession": "0000050863-26-000079",
+      "document_url": "https://www.sec.gov/Archives/edgar/data/50863/000005086326000079/intc-20260328.htm"
+    },
+    {
+      "company": "INTEL CORP",
+      "cik": "0000050863",
+      "form": "8-K",
+      "filing_date": "2026-04-23",
+      "report_date": "2026-04-23",
+      "accession": "0000050863-26-000077",
+      "document_url": "https://www.sec.gov/Archives/edgar/data/50863/000005086326000077/intc-20260423.htm"
+    },
+    {
+      "company": "ASML HOLDING NV",
+      "cik": "0000937966",
+      "form": "6-K",
+      "filing_date": "2026-07-15",
+      "report_date": "2026-06-28",
+      "accession": "0001628280-26-048235",
+      "document_url": "https://www.sec.gov/Archives/edgar/data/937966/000162828026048235/form6-kquarterlyfilings.htm"
+    },
+    {
+      "company": "ASML HOLDING NV",
+      "cik": "0000937966",
+      "form": "6-K",
+      "filing_date": "2026-04-23",
+      "report_date": "2026-04-23",
+      "accession": "0001628280-26-026703",
+      "document_url": "https://www.sec.gov/Archives/edgar/data/937966/000162828026026703/form6-kagmdisclosureofagmr.htm"
+    },
+    {
+      "company": "ASML HOLDING NV",
+      "cik": "0000937966",
+      "form": "6-K",
+      "filing_date": "2026-04-15",
+      "report_date": "2026-03-29",
+      "accession": "0001628280-26-025147",
+      "document_url": "https://www.sec.gov/Archives/edgar/data/937966/000162828026025147/form6-kquarterlyfilings.htm"
+    },
+    {
+      "company": "ASML HOLDING NV",
+      "cik": "0000937966",
+      "form": "6-K",
+      "filing_date": "2026-03-11",
+      "report_date": "2026-03-09",
+      "accession": "0001628280-26-016671",
+      "document_url": "https://www.sec.gov/Archives/edgar/data/937966/000162828026016671/form6-kagm.htm"
+    },
+    {
+      "company": "ASML HOLDING NV",
+      "cik": "0000937966",
+      "form": "20-F",
+      "filing_date": "2026-02-25",
+      "report_date": "2025-12-31",
+      "accession": "0001628280-26-011378",
+      "document_url": "https://www.sec.gov/Archives/edgar/data/937966/000162828026011378/asml-20251231.htm"
+    },
+    {
+      "company": "ASML HOLDING NV",
+      "cik": "0000937966",
+      "form": "6-K",
+      "filing_date": "2026-02-25",
+      "report_date": "2025-12-31",
+      "accession": "0001628280-26-011377",
+      "document_url": "https://www.sec.gov/Archives/edgar/data/937966/000162828026011377/form6-kannualreportbasedon.htm"
+    },
+    {
+      "company": "ASML HOLDING NV",
+      "cik": "0000937966",
+      "form": "6-K",
+      "filing_date": "2026-01-28",
+      "report_date": "2025-12-31",
+      "accession": "0001628280-26-003701",
+      "document_url": "https://www.sec.gov/Archives/edgar/data/937966/000162828026003701/form6-kquarterlyfilings.htm"
+    },
+    {
+      "company": "ASML HOLDING NV",
+      "cik": "0000937966",
+      "form": "6-K",
+      "filing_date": "2025-10-15",
+      "report_date": "2025-09-28",
+      "accession": "0001628280-25-045043",
+      "document_url": "https://www.sec.gov/Archives/edgar/data/937966/000162828025045043/form6-kquarterlyfilings.htm"
+    }
+  ]
+}
