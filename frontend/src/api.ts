@@ -60,6 +60,19 @@ export function retrySession(id: number) {
   );
 }
 
+export interface QaResult {
+  question: string;
+  answer: string;
+  sources: { title: string; url: string }[];
+}
+
+export function askQuestion(question: string) {
+  return request<QaResult>("/api/v1/qa", {
+    method: "POST",
+    body: JSON.stringify({ question }),
+  });
+}
+
 export function getSession(id: number) {
   return request<SessionDetail>(`/api/v1/sessions/${id}`);
 }

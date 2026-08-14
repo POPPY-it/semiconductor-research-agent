@@ -55,6 +55,10 @@ class LoginRequest(BaseModel):
     token: str = Field(..., min_length=1)
 
 
+class QuestionRequest(BaseModel):
+    question: str = Field(..., min_length=2, max_length=500)
+
+
 def create_app(
     queue: TaskQueue | None = None,
     service: ReportService | None = None,
@@ -151,6 +155,11 @@ def create_app(
         session_id = service.store.create(req.topic, req.report_type)
         task_id = queue.submit(service.run, session_id, req.topic, req.report_type)
         return {"session_id": session_id, "task_id": task_id}
+
+    @app.post("/api/v1/qa", dependencies=[Depends(require_auth)])
+    async def ask_question(req: QuestionRequest = Body(...)):
+        """财报/行业数据问答（同步，轻量预算）。"""
+        return service.qa(req.question)
 
     @app.get("/api/v1/sessions", dependencies=[Depends(require_auth)])
     async def list_sessions(limit: int = 20):

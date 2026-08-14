@@ -1,9 +1,14 @@
 import { useEffect, useState } from "react";
 import { Tabs, message } from "antd";
-import { FileTextOutlined, PlusOutlined } from "@ant-design/icons";
+import {
+  FileTextOutlined,
+  PlusOutlined,
+  QuestionCircleOutlined,
+} from "@ant-design/icons";
 import NewTask from "./pages/NewTask";
 import SessionsList from "./pages/SessionsList";
 import SessionDetail from "./pages/SessionDetail";
+import QaPanel from "./pages/QaPanel";
 import { login } from "./api";
 
 export default function App() {
@@ -33,6 +38,15 @@ export default function App() {
           activeKey={tab}
           onChange={setTab}
           items={[
+            {
+              key: "qa",
+              label: (
+                <span>
+                  <QuestionCircleOutlined /> 数据问答
+                </span>
+              ),
+              children: <QaPanel />,
+            },
             {
               key: "new",
               label: (

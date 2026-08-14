@@ -76,6 +76,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         self.rules = rules or {
             "POST /api/v1/sessions": (60, 5),       # 创建任务：5 次/分钟
             "POST /api/v1/auth/login": (60, 10),    # 登录：10 次/分钟
+            "POST /api/v1/qa": (60, 20),            # 问答：20 次/分钟
             "GET /api/v1/sessions": (60, 120),      # 查询：120 次/分钟
         }
         self._buckets: dict[str, list[float]] = defaultdict(list)

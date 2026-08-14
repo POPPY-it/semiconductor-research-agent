@@ -111,3 +111,13 @@ class ReportService:
             self.store.set_status(session_id, STATUS_ERROR)
             self.bus.publish(session_id, {"type": "error", "data": {"message": str(e)[:500]}})
             metrics.inc("report_tasks_total", ("error",))
+
+    def qa(self, question: str) -> dict:
+        """同步问答（轻量任务，直接跑在请求线程；预算独立熔断）。"""
+        t0 = time.time()
+        pipeline = self._get_pipeline()
+        result = pipeline.answer_question(question)
+        metrics.inc("qa_requests_total")
+        metrics.inc("qa_duration_ms_sum", ("",), int((time.time() - t0) * 1000))
+        metrics.inc("qa_count", ())
+        return result

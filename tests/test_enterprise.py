@@ -49,6 +49,13 @@ def make_app(tmp_path, token="test-token-1"):
                 "budget_used_chars": 100,
             }
 
+        def answer_question(self, question):
+            return {
+                "question": question,
+                "answer": "假答案",
+                "sources": [{"title": "来源", "url": "https://example.com/x"}],
+            }
+
     service = ReportService(store, bus, lambda: FakePipeline())
     return create_app(queue=queue, service=service)
 
@@ -103,6 +110,20 @@ def test_retry_endpoint(tmp_path):
         "running",
         "done",
     )
+
+
+def test_qa_endpoint(tmp_path):
+    client = TestClient(make_app(tmp_path))
+    headers = {"X-API-Token": "test-token-1"}
+    resp = client.post(
+        "/api/v1/qa", json={"question": "台积电营收？"}, headers=headers
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["answer"] == "假答案"
+    assert data["sources"][0]["url"] == "https://example.com/x"
+    # 未认证 → 401
+    assert client.post("/api/v1/qa", json={"question": "x?"}).status_code == 401
 
 
 def test_recover_stale(tmp_path):

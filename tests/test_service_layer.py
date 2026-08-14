@@ -25,6 +25,15 @@ class FakePipeline:
             "report": "# 假报告\n\n" + topic,
             "verdict": {"passed": True, "issues": []},
             "revision_rounds": 0,
+            "model_used": "primary",
+            "budget_used_chars": 100,
+        }
+
+    def answer_question(self, question):
+        return {
+            "question": question,
+            "answer": "这是假答案：42",
+            "sources": [{"title": "假来源", "url": "https://example.com/1"}],
         }
 
 

@@ -212,3 +212,38 @@ class ReportPipeline:
             "model_used": ("fallback" if used_fallback[0] else "primary"),
             "budget_used_chars": primary.used_chars,
         }
+
+    def answer_question(self, question: str) -> dict:
+        """财报/行业数据问答（W8 新入口）：轻量 Agent + 直接检索附加参考来源。
+
+        问答预算为任务预算的 1/10，独立熔断。
+        """
+        search_knowledge, query_filings = self._make_tools()
+        model = BudgetedModel(
+            build_model(), budget_chars=max(100_000, settings.TOKEN_BUDGET_CHARS // 10)
+        )
+        qa_agent = CodeAgent(
+            tools=[search_knowledge, query_filings],
+            model=model,
+            max_steps=4,
+            instructions=(
+                "你是半导体行业数据助手。只能依据检索工具的结果回答，禁止编造。\n"
+                "要求：1) 中文回答，简明扼要（300 字内）；2) 关键数字后标注来源链接；"
+                "3) 检索不到就明确回答「知识库中没有相关数据」，不要猜测。"
+            ),
+        )
+        answer = str(qa_agent.run(question))
+        sources = []
+        seen = set()
+        for doc_id, _score in self.retriever.search_hybrid(question, top_k=5):
+            doc = self.retriever.documents.get(doc_id)
+            if not doc or doc.meta.get("url") in seen:
+                continue
+            seen.add(doc.meta.get("url"))
+            sources.append(
+                {
+                    "title": str(doc.meta.get("title", ""))[:80],
+                    "url": str(doc.meta.get("url", "")),
+                }
+            )
+        return {"question": question, "answer": answer, "sources": sources[:5]}
