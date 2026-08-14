@@ -54,9 +54,10 @@ python -m venv .venv
 # 运行第一个 Agent
 .venv\Scripts\python examples\01_hello_agent.py
 
-# 采集真实数据（Day 6 原型）
-.venv\Scripts\python -m data.collectors.sec_edgar
-.venv\Scripts\python -m data.collectors.news_rss
+# 数据采集（3 个数据源，SQLite 去重入库）
+.venv\Scripts\python scripts\collect.py --once
+# 每日定时采集（常驻）
+.venv\Scripts\python scripts\collect.py --schedule --hour 8
 ```
 
 > 注意：Google News RSS 在本机需走代理（见 `docs/day1-log.md`）；SEC EDGAR 请求必须带自定义 User-Agent。
@@ -69,6 +70,9 @@ python -m venv .venv
 - [x] W1D5 项目骨架 + git init
 - [x] W1D6 数据源验证（SEC EDGAR + Google News RSS + IT之家）
 - [x] **博客①已发布**：[1800 行读懂一个 Agent 引擎：smolagents 内核剖析](https://juejin.cn/post/7673531977241247744)
-- [ ] W2 技术预研 → W3-7 模块开发与上线
+- [x] W2 技术预研（RAG 评测 `docs/w2-spike-report.md`、SSE 流式 `backend/app/main.py`、队列选型）
+- [x] **博客②已发布**：[RAG 检索链路实测：BM25 vs 向量 vs 混合](https://juejin.cn/post/7673810995882524672)
+- [x] W3 M1 数据管道：适配器接口 + 重试 + SQLite 去重入库 + 采集日志 + APScheduler 定时
+- [ ] W4 M2 RAG 落地（加权 RRF + reranker）+ M3 多 Agent 编排 → W5-7 服务层/前端/上线
 
 详细计划见 [PLAN.md](PLAN.md)。
