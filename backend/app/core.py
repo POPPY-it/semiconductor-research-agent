@@ -40,6 +40,8 @@ class Settings:
     FALLBACK_LLM_API_KEY: str = os.getenv("FALLBACK_LLM_API_KEY", "")
     FALLBACK_LLM_BASE_URL: str = os.getenv("FALLBACK_LLM_BASE_URL", "")
     FALLBACK_LLM_MODEL: str = os.getenv("FALLBACK_LLM_MODEL", "")
+    # Semantic Scholar API Key（可选，免费申请；未设置走匿名额度，易触发限流）
+    SEMANTIC_SCHOLAR_API_KEY: str = os.getenv("SEMANTIC_SCHOLAR_API_KEY", "")
 
     @classmethod
     def auth_enabled(cls) -> bool:

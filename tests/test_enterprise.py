@@ -204,7 +204,7 @@ def test_generate_chart_tool(tmp_path):
             return []
 
     pipe = ReportPipeline(FakeRetriever(), FakeStore())
-    _sk, _qf, _sa, gen_chart = pipe._make_tools()
+    _sk, _qf, _sa, _sss, gen_chart = pipe._make_tools()
     md = gen_chart("bar", '[{"label":"A","value":10},{"label":"B","value":20}]', "测试图表")
     assert md.startswith("![测试图表](/charts/")
     fname = md.split("(/charts/")[1].rstrip(")")

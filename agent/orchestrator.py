@@ -223,10 +223,47 @@ class ReportPipeline:
             _plt.close(fig)
             return f"![{title}](/charts/{fname})"
 
-        return search_knowledge, query_filings, search_arxiv, generate_chart
+        @tool
+        def search_semantic_scholar(query: str, limit: int = 5) -> str:
+            """检索学术论文并返回被引次数（引文影响力，学术调研用）。
+
+            Args:
+                query: 英文检索词或短语，如 "LLM agent"。
+                limit: 返回条数，默认 5。
+            """
+            import time as _time
+
+            import requests as _requests
+
+            url = "https://api.semanticscholar.org/graph/v1/paper/search"
+            params = {
+                "query": query,
+                "limit": limit,
+                "fields": "title,year,citationCount,abstract,url",
+            }
+            headers = {}
+            if settings.SEMANTIC_SCHOLAR_API_KEY:
+                headers["x-api-key"] = settings.SEMANTIC_SCHOLAR_API_KEY
+            for attempt in range(3):
+                resp = _requests.get(url, params=params, headers=headers, timeout=20)
+                if resp.status_code == 429:  # 官方限流：指数退避重试
+                    _time.sleep(4 * (attempt + 1))
+                    continue
+                resp.raise_for_status()
+                papers = resp.json().get("data", [])
+                lines = []
+                for p in papers:
+                    lines.append(
+                        f"[{p.get('title')}] ({p.get('year')}) 被引 {p.get('citationCount')} 次 "
+                        f"{p.get('url', '')}\n摘要: {(p.get('abstract') or '')[:300]}"
+                    )
+                return "\n---\n".join(lines) or "（无结果）"
+            return "（Semantic Scholar 暂时限流，请稍后重试）"
+
+        return search_knowledge, query_filings, search_arxiv, search_semantic_scholar, generate_chart
 
     def _build_agents(self, model, report_type: str = "weekly"):
-        search_knowledge, query_filings, search_arxiv, generate_chart = self._make_tools()
+        search_knowledge, query_filings, search_arxiv, search_semantic_scholar, generate_chart = self._make_tools()
         template = REPORT_TEMPLATES.get(report_type, REPORT_TEMPLATES["weekly"])
         extra = (
             f"4) 按「{template['sections']}」分节；"
@@ -236,13 +273,13 @@ class ReportPipeline:
         if template.get("cite_format"):
             extra += f"7) {template['cite_format']}。"
         researcher = CodeAgent(
-            tools=[search_knowledge, query_filings, search_arxiv, generate_chart],
+            tools=[search_knowledge, query_filings, search_arxiv, search_semantic_scholar, generate_chart],
             model=model,
             max_steps=12,
             instructions=RESEARCHER_INSTRUCTIONS.format(extra=extra),
         )
         qa = CodeAgent(
-            tools=[search_knowledge, query_filings, search_arxiv],
+            tools=[search_knowledge, query_filings, search_arxiv, search_semantic_scholar],
             model=model,
             max_steps=8,
             instructions=QA_INSTRUCTIONS,
@@ -319,12 +356,12 @@ class ReportPipeline:
 
         问答预算为任务预算的 1/10，独立熔断；history 提供最近几轮 Q/A 用于指代消解。
         """
-        search_knowledge, query_filings, search_arxiv, _generate_chart = self._make_tools()
+        search_knowledge, query_filings, search_arxiv, search_semantic_scholar, _generate_chart = self._make_tools()
         model = BudgetedModel(
             build_model(), budget_chars=max(100_000, settings.TOKEN_BUDGET_CHARS // 10)
         )
         qa_agent = CodeAgent(
-            tools=[search_knowledge, query_filings, search_arxiv],
+            tools=[search_knowledge, query_filings, search_arxiv, search_semantic_scholar],
             model=model,
             max_steps=4,
             instructions=(
