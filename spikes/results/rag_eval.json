@@ -1,0 +1,116 @@
+[
+  {
+    "name": "BM25-only",
+    "recall@5_mean": 0.65,
+    "mrr_mean": 0.7,
+    "latency_ms_mean": 0.1,
+    "per_query": [
+      {
+        "query": "台积电 2nm 产能进展如何",
+        "recall@5": 1.0,
+        "mrr": 1.0,
+        "latency_ms": 0.2
+      },
+      {
+        "query": "NVIDIA 最近提交了哪些财报",
+        "recall@5": 0.625,
+        "mrr": 1.0,
+        "latency_ms": 0.1
+      },
+      {
+        "query": "存储芯片价格走势",
+        "recall@5": 1.0,
+        "mrr": 0.5,
+        "latency_ms": 0.1
+      },
+      {
+        "query": "SEMI 对设备支出的最新预期",
+        "recall@5": 0.0,
+        "mrr": 0.0,
+        "latency_ms": 0.1
+      },
+      {
+        "query": "ASML 的财报披露",
+        "recall@5": 0.625,
+        "mrr": 1.0,
+        "latency_ms": 0.1
+      }
+    ]
+  },
+  {
+    "name": "Vector-only",
+    "recall@5_mean": 0.425,
+    "mrr_mean": 0.4,
+    "latency_ms_mean": 9.1,
+    "per_query": [
+      {
+        "query": "台积电 2nm 产能进展如何",
+        "recall@5": 1.0,
+        "mrr": 1.0,
+        "latency_ms": 29.6
+      },
+      {
+        "query": "NVIDIA 最近提交了哪些财报",
+        "recall@5": 0.125,
+        "mrr": 0.5,
+        "latency_ms": 3.8
+      },
+      {
+        "query": "存储芯片价格走势",
+        "recall@5": 1.0,
+        "mrr": 0.5,
+        "latency_ms": 4.2
+      },
+      {
+        "query": "SEMI 对设备支出的最新预期",
+        "recall@5": 0.0,
+        "mrr": 0.0,
+        "latency_ms": 4.1
+      },
+      {
+        "query": "ASML 的财报披露",
+        "recall@5": 0.0,
+        "mrr": 0.0,
+        "latency_ms": 3.5
+      }
+    ]
+  },
+  {
+    "name": "Hybrid-RRF",
+    "recall@5_mean": 0.575,
+    "mrr_mean": 0.7,
+    "latency_ms_mean": 4.6,
+    "per_query": [
+      {
+        "query": "台积电 2nm 产能进展如何",
+        "recall@5": 1.0,
+        "mrr": 1.0,
+        "latency_ms": 5.1
+      },
+      {
+        "query": "NVIDIA 最近提交了哪些财报",
+        "recall@5": 0.5,
+        "mrr": 1.0,
+        "latency_ms": 4.9
+      },
+      {
+        "query": "存储芯片价格走势",
+        "recall@5": 1.0,
+        "mrr": 0.5,
+        "latency_ms": 4.2
+      },
+      {
+        "query": "SEMI 对设备支出的最新预期",
+        "recall@5": 0.0,
+        "mrr": 0.0,
+        "latency_ms": 4.4
+      },
+      {
+        "query": "ASML 的财报披露",
+        "recall@5": 0.375,
+        "mrr": 1.0,
+        "latency_ms": 4.6
+      }
+    ]
+  }
+]

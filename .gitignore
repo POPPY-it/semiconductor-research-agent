@@ -19,6 +19,8 @@ build/
 # --- 数据与产物 ---
 data/*.db
 data/*.sqlite3
+data/vectorstore/
+data/models/
 reports/output/
 *.log
 
