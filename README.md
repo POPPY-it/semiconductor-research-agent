@@ -1,15 +1,15 @@
-# 半导体行业研报 + 学术调研 Agent（Research Agent）
+# 多领域研究助手：半导体研报 + 学术调研 + 生物医药（Research Agent）
 
 > GitHub：https://github.com/POPPY-it/semiconductor-research-agent
 > 秋招项目：基于 [smolagents](https://github.com/huggingface/smolagents)（Apache-2.0）内核二次开发的
-> **垂直研究助手**——输入选题，自动完成数据采集、混合检索、多 Agent 协作撰写、事实质检，产出带引用溯源的研究报告。
+> **多领域研究助手**——输入选题，自动完成数据采集、混合检索、多 Agent 协作撰写、事实质检，产出带引用溯源的研究报告。
 >
-> 双模式：**行业研报**（SEC 财报 + 行业新闻）与 **学术调研**（arXiv 论文，实时检索 + 参考文献列表）。
+> 三领域：**行业研报**（SEC 财报 + 行业新闻）、**学术调研**（arXiv）、**生物医药**（PubMed），实时检索 + 参考文献列表。
 > 内核复用开源，其余（数据层 / RAG / 编排 / 服务层 / 前端 / 部署）全部自研。
 
 ## 目标与可量化成果
 
-- 接入 ≥5 个真实公开数据源（SEC EDGAR 财报、arXiv 论文、行业新闻 RSS 等）- 每日自动产出 1 份行业日报、每周 1 份深度研报（人工约 2h → Agent ≤15min）
+- 接入 ≥6 个真实公开数据源（SEC EDGAR 财报、arXiv 论文、PubMed 生物医药文献、行业新闻 RSS 等）
 - 报告所有数字带引用溯源，质检 Agent 交叉校验
 - 服务压测报告（QPS / P95 延迟 / 失败率）
 
@@ -29,7 +29,7 @@
 | 类型 | 场景 |
 |---|---|
 | daily / weekly / deep | 行业研报（SEC 财报 + 行业新闻） |
-| survey | 学术调研（arXiv 实时检索 + 参考文献列表） |
+| survey | 学术调研（arXiv + PubMed 实时检索 + 参考文献列表） |
 
 ## 目录结构
 
