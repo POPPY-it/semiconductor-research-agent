@@ -94,6 +94,37 @@ class ReportPipeline:
         self.retriever = retriever
         self.store = store
         self._mcp_tool = None
+        self._memory = None
+        self._memory_client = None
+
+    def _get_memory_store(self):
+        if self._memory is None:
+            from agent.memory import MemoryStore
+
+            embedder = getattr(self.retriever, "embedder", None)
+            vector_dir = settings.VECTOR_DIR.parent / "memories"
+            self._memory = MemoryStore(settings.MEMORY_DB, embedder=embedder, vector_dir=vector_dir)
+        return self._memory
+
+    def _get_memory_client(self):
+        if self._memory_client is None:
+            from openai import OpenAI
+
+            self._memory_client = OpenAI(base_url=settings.LLM_BASE_URL, api_key=settings.LLM_API_KEY)
+            self._memory_client.model_id = settings.LLM_MODEL
+        return self._memory_client
+
+    def _extract_and_store_memories(self, question: str, answer: str) -> None:
+        """对话后抽取长期记忆并入库（失败不阻断）。"""
+        try:
+            mem = self._get_memory_store()
+            from agent.memory import MemoryStore
+
+            facts = MemoryStore.extract(self._get_memory_client(), f"问：{question}\n答：{answer}")
+            for f in facts:
+                mem.add(f)
+        except Exception:  # noqa: BLE001
+            pass
 
     def _get_mcp_tool(self):
         """懒加载 MCP 工具（首次调用时连接各 MCP Server 发现工具）。"""
@@ -359,7 +390,18 @@ class ReportPipeline:
                     return agent.run(task, reset=reset)
                 raise
 
-        draft = guarded_run(researcher, f"撰写研报：{topic}")
+        mem_ctx = ""
+        try:
+            memories = self._get_memory_store().search(topic, top_k=3)
+            if memories:
+                mem_ctx = (
+                    "用户长期关注方向（可据此调整报告侧重）：\n"
+                    + "\n".join(f"- {m}" for m in memories)
+                    + "\n\n"
+                )
+        except Exception:  # noqa: BLE001
+            pass
+        draft = guarded_run(researcher, mem_ctx + f"撰写研报：{topic}")
         verdict: dict | None = None
         rounds = 0
         for rounds in range(1, 3):  # 质检不过最多修订 2 轮
@@ -430,8 +472,21 @@ class ReportPipeline:
                     lines.append(f"答：{content}")
             if lines:
                 context = "对话历史（仅用于理解上下文与指代，不得重复历史答案）：\n" + "\n\n".join(lines) + "\n\n"
+        # 跨会话长期记忆（Mem0-style）：召回相关偏好注入上下文
+        try:
+            memories = self._get_memory_store().search(question, top_k=4)
+            if memories:
+                context = (
+                    "用户长期记忆（相关偏好/关注方向，可用于个性化，但不得编造用户没说过的话）：\n"
+                    + "\n".join(f"- {m}" for m in memories)
+                    + "\n\n"
+                    + context
+                )
+        except Exception:  # noqa: BLE001
+            pass
         task = context + f"当前问题：{question}"
         answer = str(qa_agent.run(task))
+        self._extract_and_store_memories(question, answer)
         sources = []
         seen = set()
         for doc_id, _score in self.retriever.search_hybrid(question, top_k=5):

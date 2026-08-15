@@ -97,6 +97,14 @@ export function getConversation(id: number) {
   return request<{ messages: QaMessage[] }>(`/api/v1/qa/conversations/${id}`);
 }
 
+export function listMemories() {
+  return request<{ memories: string[] }>("/api/v1/memories");
+}
+
+export function clearMemories() {
+  return request<{ cleared: number }>("/api/v1/memories", { method: "DELETE" });
+}
+
 export async function uploadDocument(file: File) {
   const form = new FormData();
   form.append("file", file);

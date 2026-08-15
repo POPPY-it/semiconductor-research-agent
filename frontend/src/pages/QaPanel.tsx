@@ -30,6 +30,8 @@ import {
   getConversation,
   listDocuments,
   uploadDocument,
+  listMemories,
+  clearMemories,
   QaMessage,
   ConversationSummary,
 } from "../api";
@@ -52,7 +54,26 @@ export default function QaPanel() {
   const [error, setError] = useState("");
   const [docs, setDocs] = useState<{ title: string; chars: number }[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [memories, setMemories] = useState<string[]>([]);
   const listRef = useRef<HTMLDivElement>(null);
+
+  const refreshMemories = async () => {
+    try {
+      setMemories((await listMemories()).memories);
+    } catch {
+      /* 忽略 */
+    }
+  };
+
+  const onClearMemories = async () => {
+    try {
+      const r = await clearMemories();
+      message.success(`已清空 ${r.cleared} 条长期记忆`);
+      refreshMemories();
+    } catch (e) {
+      message.error(String(e));
+    }
+  };
 
   const refreshDocs = async () => {
     try {
@@ -72,6 +93,7 @@ export default function QaPanel() {
 
   useEffect(() => {
     refreshDocs();
+    refreshMemories();
     refreshConversations().then(() => {
       // 默认不自动打开历史，保持干净入口
     });
@@ -111,6 +133,7 @@ export default function QaPanel() {
         setCurrentConvId(res.conversation_id);
         refreshConversations();
       }
+      refreshMemories(); // 回答后可能抽取了新记忆
     } catch (e) {
       setError(String(e));
     } finally {
@@ -260,6 +283,28 @@ export default function QaPanel() {
             ghost
             size="small"
             items={[
+              {
+                key: "mem",
+                label: <Text type="secondary" style={{ fontSize: 12 }}>🧠 长期记忆（跨会话个性化，共 {memories.length} 条）</Text>,
+                children: (
+                  <div style={{ maxHeight: 120, overflowY: "auto" }}>
+                    {memories.length === 0 ? (
+                      <Text type="secondary" style={{ fontSize: 12 }}>暂无记忆，Agent 会在对话中自动学习你的偏好</Text>
+                    ) : (
+                      <>
+                        {memories.map((m, i) => (
+                          <div key={i} style={{ fontSize: 12, color: "#475569", padding: "3px 0" }}>
+                            · {m}
+                          </div>
+                        ))}
+                        <Button size="small" danger type="link" onClick={onClearMemories} style={{ padding: 0 }}>
+                          清空记忆
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                ),
+              },
               {
                 key: "kb",
                 label: <Text type="secondary" style={{ fontSize: 12 }}><InboxOutlined /> 知识资产（上传 PDF/文档，共 {docs.length} 篇）</Text>,

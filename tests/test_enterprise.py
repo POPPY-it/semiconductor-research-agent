@@ -226,6 +226,46 @@ def test_knowledge_graph():
     assert len(g.centrality(10)) > 0
 
 
+def test_memory_store_keyword_path(tmp_path):
+    from agent.memory import MemoryStore
+
+    m = MemoryStore(tmp_path / "mem.db")  # 无 embedder → 关键词召回路径
+    m.add("用户关注 HBM 与先进封装方向")
+    m.add("用户偏好半导体行业深度研报")
+    hits = m.search("HBM 最近有什么进展", top_k=3)
+    assert any("HBM" in x for x in hits)
+    assert len(m.list_all()) == 2
+    assert m.clear() == 2
+    assert m.list_all() == []
+
+
+def test_memory_extract_with_fake_client():
+    from agent.memory import MemoryStore
+
+    class _Completions:
+        def create(self, **kwargs):
+            class _Msg:
+                content = '["用户关注存内计算方向", "用户在做秋招项目"]'
+
+            class _Choice:
+                message = _Msg()
+
+            class _Resp:
+                choices = [_Choice()]
+
+            return _Resp()
+
+    class _Chat:
+        completions = _Completions()
+
+    class FakeClient:
+        model_id = "fake"
+        chat = _Chat()
+
+    facts = MemoryStore.extract(FakeClient(), "问：存内计算有什么进展 答：PIM 论文很多")
+    assert facts == ["用户关注存内计算方向", "用户在做秋招项目"]
+
+
 # ---------- token 预算熔断 ----------
 
 class FakeModel:

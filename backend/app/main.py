@@ -178,6 +178,33 @@ def create_app(
     async def get_conversation(conversation_id: int):
         return {"messages": service.store.get_qa_history(conversation_id)}
 
+    @app.get("/api/v1/memories", dependencies=[Depends(require_auth)])
+    async def list_memories():
+        """列出跨会话长期记忆。"""
+        from agent.memory import MemoryStore
+
+        mem = MemoryStore(settings.MEMORY_DB)
+        try:
+            return {"memories": mem.list_all()}
+        finally:
+            mem.close()
+
+    @app.delete("/api/v1/memories", dependencies=[Depends(require_auth)])
+    async def clear_memories():
+        """清空长期记忆（含向量索引）。"""
+        from agent.knowledge.embedder import FastembedEmbedder
+        from agent.memory import MemoryStore
+
+        mem = MemoryStore(
+            settings.MEMORY_DB,
+            embedder=FastembedEmbedder(cache_dir=str(settings.MODEL_DIR)),
+            vector_dir=settings.VECTOR_DIR.parent / "memories",
+        )
+        try:
+            return {"cleared": mem.clear()}
+        finally:
+            mem.close()
+
     @app.post("/api/v1/documents", dependencies=[Depends(require_auth)])
     async def upload_document(file: UploadFile = File(...)):
         """上传文档（PDF/txt/md/html）→ 解析入库 → 重建知识库索引。"""
