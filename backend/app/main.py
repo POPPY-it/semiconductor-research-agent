@@ -6,6 +6,7 @@
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from pathlib import Path
@@ -204,6 +205,59 @@ def create_app(
             return {"cleared": mem.clear()}
         finally:
             mem.close()
+
+    # ---- MCP 工具生态（显性化）----
+
+    def _get_mcp_catalog(app):
+        """懒构建并缓存 MCP 工具目录：tool_name -> {server, spec, description}。"""
+        if not hasattr(app.state, "mcp_catalog"):
+            import mcp_servers
+            from agent.mcp_client import discover
+
+            names = [n.strip() for n in settings.MCP_SERVERS.split(",") if n.strip()]
+            catalog: dict = {}
+            for name in names:
+                try:
+                    spec = mcp_servers.build_spec(name)
+                    for tname, entry in discover([spec]).items():
+                        catalog[tname] = {
+                            "server": name,
+                            "spec": spec,
+                            "description": entry.get("description", ""),
+                        }
+                except Exception as e:  # noqa: BLE001
+                    catalog[f"__error_{name}"] = {"server": name, "error": str(e)[:120]}
+            app.state.mcp_catalog = catalog
+        return app.state.mcp_catalog
+
+    @app.get("/api/v1/mcp/status", dependencies=[Depends(require_auth)])
+    async def mcp_status():
+        # discover 内部用 asyncio.run，不能在 FastAPI 事件循环内调用 → 丢线程池
+        catalog = await asyncio.to_thread(_get_mcp_catalog, app)
+        servers: dict[str, list[str]] = {}
+        tools = []
+        for tname, entry in catalog.items():
+            if "error" in entry:
+                servers.setdefault(entry["server"], []).append("__error__")
+                continue
+            servers.setdefault(entry["server"], []).append(tname)
+            tools.append({"server": entry["server"], "tool": tname, "description": entry["description"][:120]})
+        return {
+            "servers": [{"name": k, "tools": v} for k, v in servers.items()],
+            "tools": tools,
+        }
+
+    @app.post("/api/v1/mcp/call", dependencies=[Depends(require_auth)])
+    async def mcp_call_tool(req: dict = Body(...)):
+        from agent.mcp_client import _call_tool
+
+        catalog = await asyncio.to_thread(_get_mcp_catalog, app)
+        entry = catalog.get(req.get("tool_name", ""))
+        if not entry or "spec" not in entry:
+            raise HTTPException(status_code=404, detail="MCP 工具未找到")
+        args = req.get("arguments") or {}
+        result = await asyncio.to_thread(_call_tool, entry["spec"], req["tool_name"], args)
+        return {"tool_name": req["tool_name"], "result": result}
 
     @app.post("/api/v1/documents", dependencies=[Depends(require_auth)])
     async def upload_document(file: UploadFile = File(...)):

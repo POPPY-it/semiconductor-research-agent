@@ -34,6 +34,8 @@ import {
   uploadDocument,
   listMemories,
   clearMemories,
+  mcpStatus,
+  mcpCall,
   QaMessage,
   ConversationSummary,
 } from "../api";
@@ -58,7 +60,33 @@ export default function QaPanel() {
   const [uploading, setUploading] = useState(false);
   const [memories, setMemories] = useState<string[]>([]);
   const [retrieval, setRetrieval] = useState<{ method: string; top_k: number; corpus_size: number } | null>(null);
+  const [mcpServers, setMcpServers] = useState<{ name: string; tools: string[] }[]>([]);
+  const [mcpTesting, setMcpTesting] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
+
+  const refreshMcp = async () => {
+    try {
+      setMcpServers((await mcpStatus()).servers);
+    } catch {
+      /* 忽略 */
+    }
+  };
+
+  const testMcp = async () => {
+    setMcpTesting(true);
+    try {
+      const r = await mcpCall("search_github_repos", { query: "LLM agent framework", limit: 3 });
+      message.success("MCP 工具调用成功，结果已输出到控制台（见下方）");
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: "**MCP 工具实测** `search_github_repos`：\n\n" + r.result, sources: [] },
+      ]);
+    } catch (e) {
+      message.error(String(e));
+    } finally {
+      setMcpTesting(false);
+    }
+  };
 
   const refreshMemories = async () => {
     try {
@@ -97,6 +125,7 @@ export default function QaPanel() {
   useEffect(() => {
     refreshDocs();
     refreshMemories();
+    refreshMcp();
     refreshConversations().then(() => {
       // 默认不自动打开历史，保持干净入口
     });
@@ -314,6 +343,31 @@ export default function QaPanel() {
             ghost
             size="small"
             items={[
+              {
+                key: "mcp",
+                label: <Text type="secondary" style={{ fontSize: 12 }}>🔌 MCP 工具生态（{mcpServers.length} 个 Server）</Text>,
+                children: (
+                  <div>
+                    {mcpServers.length === 0 ? (
+                      <Text type="secondary" style={{ fontSize: 12 }}>未检测到 MCP Server，请检查 MCP_SERVERS 配置</Text>
+                    ) : (
+                      mcpServers.map((s) => (
+                        <div key={s.name} style={{ marginBottom: 8 }}>
+                          <Tag color="blue" style={{ fontWeight: 600 }}>{s.name}</Tag>
+                          <div style={{ paddingLeft: 8 }}>
+                            {s.tools.map((t) => (
+                              <Tag key={t} style={{ fontSize: 11 }}>{t}</Tag>
+                            ))}
+                          </div>
+                        </div>
+                      ))
+                    )}
+                    <Button size="small" type="primary" loading={mcpTesting} onClick={testMcp} style={{ marginTop: 4 }}>
+                      实测：GitHub 仓库搜索
+                    </Button>
+                  </div>
+                ),
+              },
               {
                 key: "mem",
                 label: <Text type="secondary" style={{ fontSize: 12 }}>🧠 长期记忆（跨会话个性化，共 {memories.length} 条）</Text>,

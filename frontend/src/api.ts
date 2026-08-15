@@ -115,6 +115,20 @@ export function clearMemories() {
   return request<{ cleared: number }>("/api/v1/memories", { method: "DELETE" });
 }
 
+export function mcpStatus() {
+  return request<{
+    servers: { name: string; tools: string[] }[];
+    tools: { server: string; tool: string; description: string }[];
+  }>("/api/v1/mcp/status");
+}
+
+export function mcpCall(tool_name: string, args: object) {
+  return request<{ tool_name: string; result: string }>("/api/v1/mcp/call", {
+    method: "POST",
+    body: JSON.stringify({ tool_name, arguments: args }),
+  });
+}
+
 export async function uploadDocument(file: File) {
   const form = new FormData();
   form.append("file", file);
