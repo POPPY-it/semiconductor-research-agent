@@ -272,10 +272,37 @@ class ReportPipeline:
                 return "\n---\n".join(lines) or "（无结果）"
             return "（Semantic Scholar 暂时限流，请稍后重试）"
 
-        return search_knowledge, query_filings, search_arxiv, search_semantic_scholar, generate_chart
+        @tool
+        def search_graph(entity: str) -> str:
+            """查询知识图谱（GraphRAG）：返回与某实体相关的实体及关联强度；传空字符串返回全局核心实体。
+
+            Args:
+                entity: 实体名，如 "台积电" / "HBM" / "RAG"；传 "" 查全局核心实体。
+            """
+            graph = getattr(self.retriever, "graph", None)
+            if graph is None:
+                return "（知识图谱未构建）"
+            if not entity or not entity.strip():
+                top = graph.centrality(15)
+                return "全局核心实体（按关联度）：\n" + "\n".join(f"- {e}（{w}）" for e, w in top)
+            ents = graph.related_entities(entity.strip(), 10)
+            if not ents:
+                return f"（图谱中未找到与「{entity}」相关的实体）"
+            return f"「{entity}」的关联实体（按共现强度）：\n" + "\n".join(
+                f"- {e}（共现 {w}）" for e, w in ents
+            )
+
+        return (
+            search_knowledge,
+            query_filings,
+            search_arxiv,
+            search_semantic_scholar,
+            generate_chart,
+            search_graph,
+        )
 
     def _build_agents(self, model, report_type: str = "weekly"):
-        search_knowledge, query_filings, search_arxiv, search_semantic_scholar, generate_chart = self._make_tools()
+        search_knowledge, query_filings, search_arxiv, search_semantic_scholar, generate_chart, search_graph = self._make_tools()
         template = REPORT_TEMPLATES.get(report_type, REPORT_TEMPLATES["weekly"])
         extra = (
             f"4) 按「{template['sections']}」分节；"
@@ -285,7 +312,7 @@ class ReportPipeline:
         if template.get("cite_format"):
             extra += f"7) {template['cite_format']}。"
         mcp_tool = self._get_mcp_tool()
-        base_tools = [search_knowledge, query_filings, search_arxiv, search_semantic_scholar]
+        base_tools = [search_knowledge, query_filings, search_arxiv, search_semantic_scholar, search_graph]
         if mcp_tool is not None:
             base_tools.append(mcp_tool)
         researcher = CodeAgent(
@@ -372,11 +399,11 @@ class ReportPipeline:
 
         问答预算为任务预算的 1/10，独立熔断；history 提供最近几轮 Q/A 用于指代消解。
         """
-        search_knowledge, query_filings, search_arxiv, search_semantic_scholar, _generate_chart = self._make_tools()
+        search_knowledge, query_filings, search_arxiv, search_semantic_scholar, _generate_chart, search_graph = self._make_tools()
         model = BudgetedModel(
             build_model(), budget_chars=max(100_000, settings.TOKEN_BUDGET_CHARS // 10)
         )
-        qa_tools = [search_knowledge, query_filings, search_arxiv, search_semantic_scholar]
+        qa_tools = [search_knowledge, query_filings, search_arxiv, search_semantic_scholar, search_graph]
         mcp_tool = self._get_mcp_tool()
         if mcp_tool is not None:
             qa_tools.append(mcp_tool)

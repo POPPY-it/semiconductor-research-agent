@@ -50,4 +50,13 @@ def build_retriever(
     reranker = FastembedReranker(cache_dir=str(model_dir)) if with_reranker else None
     retriever = HybridRetriever(docs, embedder, chroma, reranker=reranker)
     retriever.index()
+
+    # 构建知识图谱（GraphRAG-lite）：实体共现关系
+    from agent.knowledge.graph import KnowledgeGraph
+
+    graph = KnowledgeGraph()
+    for d in docs:
+        graph.add_document(d.doc_id, d.text)
+    retriever.graph = graph
+
     return retriever

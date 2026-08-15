@@ -204,11 +204,26 @@ def test_generate_chart_tool(tmp_path):
             return []
 
     pipe = ReportPipeline(FakeRetriever(), FakeStore())
-    _sk, _qf, _sa, _sss, gen_chart = pipe._make_tools()
+    _sk, _qf, _sa, _sss, gen_chart, _sg = pipe._make_tools()
     md = gen_chart("bar", '[{"label":"A","value":10},{"label":"B","value":20}]', "测试图表")
     assert md.startswith("![测试图表](/charts/")
     fname = md.split("(/charts/")[1].rstrip(")")
     assert (tmp_path / "charts" / fname).exists()
+
+
+def test_knowledge_graph():
+    from agent.knowledge.graph import EntityExtractor, KnowledgeGraph
+
+    g = KnowledgeGraph()
+    g.add_document("d1", "台积电 2nm 先进封装 CoWoS 产能爬坡，与 NVIDIA 合作 HBM")
+    g.add_document("d2", "台积电 2nm 与 ASML EUV 光刻设备采购")
+    g.add_document("d3", "LLM Agent 的 RAG 检索增强研究")
+    assert g.stats()["nodes"] >= 5
+    # 台积电的关联实体应包含 2nm / 先进封装 / NVIDIA / ASML 等
+    related = [e for e, _w in g.related_entities("台积电", 20)]
+    assert "2nm" in related and "先进封装" in related
+    # 全局核心实体非空
+    assert len(g.centrality(10)) > 0
 
 
 # ---------- token 预算熔断 ----------
