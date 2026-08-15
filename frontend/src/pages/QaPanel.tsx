@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import {
   Alert,
   Button,
@@ -247,10 +249,15 @@ export default function QaPanel() {
                   padding: "12px 16px",
                   fontSize: 13.5,
                   lineHeight: 1.7,
-                  whiteSpace: "pre-wrap",
                   boxShadow: "0 1px 2px rgba(0,0,0,0.04)",
                 }}>
-                  {m.content}
+                  {m.role === "user" ? (
+                    <span style={{ whiteSpace: "pre-wrap" }}>{m.content}</span>
+                  ) : (
+                    <div className="qa-answer-md">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.content}</ReactMarkdown>
+                    </div>
+                  )}
                 </div>
                 {m.role === "assistant" && m.sources?.length > 0 && (
                   <div style={{ marginTop: 6, display: "flex", flexWrap: "wrap", gap: 6 }}>
