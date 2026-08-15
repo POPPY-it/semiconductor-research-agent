@@ -525,9 +525,13 @@ class ReportPipeline:
         task = context + f"当前问题：{question}"
         answer = str(qa_agent.run(task))
         self._extract_and_store_memories(question, answer)
+
+        # RAG 检索过程显性化：返回命中的分块、相关度、来源类型（供前端"检索过程"面板展示）
+        hits = self.retriever.search_hybrid(question, top_k=5)
+        max_score = max((s for _, s in hits), default=1.0) or 1.0
         sources = []
         seen = set()
-        for doc_id, _score in self.retriever.search_hybrid(question, top_k=5):
+        for doc_id, score in hits:
             doc = self.retriever.documents.get(doc_id)
             if not doc or doc.meta.get("url") in seen:
                 continue
@@ -536,6 +540,19 @@ class ReportPipeline:
                 {
                     "title": str(doc.meta.get("title", ""))[:80],
                     "url": str(doc.meta.get("url", "")),
+                    "source_type": str(doc.meta.get("source", "")),
+                    "score": round(float(score), 3),
+                    "relevance": int(round(score / max_score * 100)),
+                    "snippet": doc.text[:220],
                 }
             )
-        return {"question": question, "answer": answer, "sources": sources[:5]}
+        return {
+            "question": question,
+            "answer": answer,
+            "sources": sources[:5],
+            "retrieval": {
+                "method": "混合检索（BM25 + 向量 + RRF 融合）",
+                "top_k": 5,
+                "corpus_size": len(self.retriever.documents),
+            },
+        }

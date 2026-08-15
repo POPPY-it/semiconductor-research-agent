@@ -57,6 +57,7 @@ export default function QaPanel() {
   const [docs, setDocs] = useState<{ title: string; chars: number }[]>([]);
   const [uploading, setUploading] = useState(false);
   const [memories, setMemories] = useState<string[]>([]);
+  const [retrieval, setRetrieval] = useState<{ method: string; top_k: number; corpus_size: number } | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
   const refreshMemories = async () => {
@@ -131,6 +132,7 @@ export default function QaPanel() {
         ...prev,
         { role: "assistant", content: res.answer, sources: res.sources },
       ]);
+      setRetrieval(res.retrieval ?? null);
       if (res.conversation_id && res.conversation_id !== currentConvId) {
         setCurrentConvId(res.conversation_id);
         refreshConversations();
@@ -260,12 +262,34 @@ export default function QaPanel() {
                   )}
                 </div>
                 {m.role === "assistant" && m.sources?.length > 0 && (
-                  <div style={{ marginTop: 6, display: "flex", flexWrap: "wrap", gap: 6 }}>
+                  <div style={{ marginTop: 10 }}>
+                    {retrieval && (
+                      <div style={{ fontSize: 11, color: "#64748b", marginBottom: 6 }}>
+                        🔍 {retrieval.method} · 知识库 {retrieval.corpus_size} 个分块 · 命中 Top {retrieval.top_k}
+                      </div>
+                    )}
                     {m.sources.map((s, j) => (
-                      <a key={j} href={s.url} target="_blank" rel="noreferrer" style={{ fontSize: 11.5, color: "#2563eb" }}>
-                        <LinkOutlined style={{ marginRight: 3 }} />
-                        {s.title?.slice(0, 40) || s.url}
-                      </a>
+                      <div key={j} className="qa-source-card" style={{ marginBottom: 6 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <Tag color="geekblue" style={{ fontSize: 10, lineHeight: "16px", margin: 0 }}>
+                            {s.source_type || "知识库"}
+                          </Tag>
+                          {typeof s.relevance === "number" && (
+                            <span style={{ fontSize: 11, color: "#2563eb", fontWeight: 600 }}>
+                              相关度 {s.relevance}%
+                            </span>
+                          )}
+                          <a href={s.url} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: "#2563eb", fontWeight: 500, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            <LinkOutlined style={{ marginRight: 4 }} />
+                            {s.title?.slice(0, 50) || s.url}
+                          </a>
+                        </div>
+                        {s.snippet && (
+                          <div style={{ fontSize: 11.5, color: "#64748b", marginTop: 4, lineHeight: 1.5, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+                            {s.snippet}
+                          </div>
+                        )}
+                      </div>
                     ))}
                   </div>
                 )}

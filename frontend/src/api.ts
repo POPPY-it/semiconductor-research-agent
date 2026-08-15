@@ -60,11 +60,21 @@ export function retrySession(id: number) {
   );
 }
 
+export interface QaSource {
+  title?: string;
+  url: string;
+  source_type?: string;
+  score?: number;
+  relevance?: number;
+  snippet?: string;
+}
+
 export interface QaResult {
   question: string;
   answer: string;
-  sources: { title: string; url: string }[];
+  sources: QaSource[];
   conversation_id?: number;
+  retrieval?: { method: string; top_k: number; corpus_size: number };
 }
 
 export function askQuestion(question: string, conversationId?: number) {
@@ -84,7 +94,7 @@ export interface ConversationSummary {
 export interface QaMessage {
   role: string;
   content: string;
-  sources: { title: string; url: string }[];
+  sources: QaSource[];
 }
 
 export function listConversations() {
