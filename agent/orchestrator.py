@@ -61,6 +61,17 @@ REPORT_TEMPLATES = {
         "min_words": 500,
         "cite_format": "参考文献格式：[n] 论文标题（作者，年份）链接",
     },
+    "medical_survey": {
+        "label": "医学综述",
+        "sections": "PICO 问题/检索策略/纳入研究/证据综合/局限与结论",
+        "min_words": 500,
+        "cite_format": "参考文献格式：[n] 论文标题（作者，期刊，年份）PMID 链接",
+        "safety": "仅做文献综述，不得给出具体用药剂量或诊疗建议；临床结论须注明证据等级（RCT/队列/病例/综述）。",
+        "disclaimer": (
+            "本报告基于公开医学文献自动生成，仅供科研参考，不构成任何诊疗或用药建议；"
+            "涉及临床决策请咨询执业医师。"
+        ),
+    },
 }
 
 
@@ -362,6 +373,8 @@ class ReportPipeline:
         )
         if template.get("cite_format"):
             extra += f"7) {template['cite_format']}。"
+        if template.get("safety"):
+            extra += f"8) {template['safety']}"
         mcp_tool = self._get_mcp_tool()
         base_tools = [search_knowledge, query_filings, search_arxiv, search_semantic_scholar, search_graph, search_pubmed]
         if mcp_tool is not None:
@@ -445,6 +458,11 @@ class ReportPipeline:
         out_dir.mkdir(parents=True, exist_ok=True)
         stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         out_path = out_dir / f"report_{report_type}_{stamp}.md"
+
+        # 医学类报告自动追加免责声明（安全合规）
+        template = REPORT_TEMPLATES.get(report_type, {})
+        if template.get("disclaimer"):
+            draft = draft.rstrip() + "\n\n---\n\n> **免责声明**：" + template["disclaimer"] + "\n"
         out_path.write_text(draft, encoding="utf-8")
 
         return {

@@ -6,6 +6,7 @@ import {
   BookOutlined,
   ThunderboltOutlined,
   CompassOutlined,
+  MedicineBoxOutlined,
   InfoCircleOutlined
 } from "@ant-design/icons";
 import { createSession } from "../api";
@@ -36,6 +37,12 @@ const TYPE_CONFIG = [
     title: "学术调研",
     desc: "500+ 字 | arXiv 最新文献调研、方法对比与引文规范",
     icon: <CompassOutlined style={{ color: "#10b981" }} />
+  },
+  {
+    key: "medical_survey",
+    title: "医学综述",
+    desc: "500+ 字 | PubMed 文献、PICO 框架与证据等级（仅科研参考）",
+    icon: <MedicineBoxOutlined style={{ color: "#ef4444" }} />
   }
 ];
 

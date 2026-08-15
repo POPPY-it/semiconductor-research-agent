@@ -23,6 +23,13 @@ DEFAULT_ENTITIES = {
         "LLM", "大语言模型", "Agent", "智能体", "RAG", "检索增强", "GraphRAG", "知识图谱",
         "多智能体", "multi-agent", "强化学习", "fine-tuning", "微调", "推理", "reasoning",
     ],
+    "medical": [
+        "PD-1", "PD-L1", "免疫检查点", "CAR-T", "CRISPR", "基因编辑", "癌症", "肿瘤",
+        "cancer", "tumor", "免疫治疗", "immunotherapy", "单抗", "抗体", "靶向",
+        "靶点", "临床试验", "clinical trial", "化疗", "放疗", "mRNA", "疫苗",
+        "基因组", "genomics", "药物", "drug", "小分子", "生物标志物", "biomarker",
+        "ADC", "双抗", "细胞治疗", "基因治疗", "肿瘤微环境", "耐药", "resistance",
+    ],
 }
 
 

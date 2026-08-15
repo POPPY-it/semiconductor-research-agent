@@ -30,6 +30,7 @@
 |---|---|
 | daily / weekly / deep | 行业研报（SEC 财报 + 行业新闻） |
 | survey | 学术调研（arXiv + PubMed 实时检索 + 参考文献列表） |
+| medical_survey | 医学综述（PubMed + PICO 框架 + 证据等级 + 免责声明） |
 
 ## 目录结构
 
