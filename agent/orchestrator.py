@@ -323,6 +323,25 @@ class ReportPipeline:
                 f"- {e}（共现 {w}）" for e, w in ents
             )
 
+        @tool
+        def search_pubmed(query: str, limit: int = 5) -> str:
+            """实时检索 PubMed 生物医药文献（含摘要）。
+
+            Args:
+                query: 英文检索词，如 "cancer immunotherapy"。
+                limit: 返回条数，默认 5。
+            """
+            from data.collectors.pubmed import search_pubmed as _pubmed
+
+            papers = _pubmed(query, limit)
+            lines = []
+            for p in papers:
+                lines.append(
+                    f"[{p['title']}] ({p['journal']}, {p['pubdate']}) {p['url']}\n"
+                    f"作者: {', '.join(p['authors'][:4])}\n摘要: {p['abstract'][:300]}"
+                )
+            return "\n---\n".join(lines) or "（无结果）"
+
         return (
             search_knowledge,
             query_filings,
@@ -330,10 +349,11 @@ class ReportPipeline:
             search_semantic_scholar,
             generate_chart,
             search_graph,
+            search_pubmed,
         )
 
     def _build_agents(self, model, report_type: str = "weekly"):
-        search_knowledge, query_filings, search_arxiv, search_semantic_scholar, generate_chart, search_graph = self._make_tools()
+        search_knowledge, query_filings, search_arxiv, search_semantic_scholar, generate_chart, search_graph, search_pubmed = self._make_tools()
         template = REPORT_TEMPLATES.get(report_type, REPORT_TEMPLATES["weekly"])
         extra = (
             f"4) 按「{template['sections']}」分节；"
@@ -343,7 +363,7 @@ class ReportPipeline:
         if template.get("cite_format"):
             extra += f"7) {template['cite_format']}。"
         mcp_tool = self._get_mcp_tool()
-        base_tools = [search_knowledge, query_filings, search_arxiv, search_semantic_scholar, search_graph]
+        base_tools = [search_knowledge, query_filings, search_arxiv, search_semantic_scholar, search_graph, search_pubmed]
         if mcp_tool is not None:
             base_tools.append(mcp_tool)
         researcher = CodeAgent(
@@ -441,11 +461,11 @@ class ReportPipeline:
 
         问答预算为任务预算的 1/10，独立熔断；history 提供最近几轮 Q/A 用于指代消解。
         """
-        search_knowledge, query_filings, search_arxiv, search_semantic_scholar, _generate_chart, search_graph = self._make_tools()
+        search_knowledge, query_filings, search_arxiv, search_semantic_scholar, _generate_chart, search_graph, search_pubmed = self._make_tools()
         model = BudgetedModel(
             build_model(), budget_chars=max(100_000, settings.TOKEN_BUDGET_CHARS // 10)
         )
-        qa_tools = [search_knowledge, query_filings, search_arxiv, search_semantic_scholar, search_graph]
+        qa_tools = [search_knowledge, query_filings, search_arxiv, search_semantic_scholar, search_graph, search_pubmed]
         mcp_tool = self._get_mcp_tool()
         if mcp_tool is not None:
             qa_tools.append(mcp_tool)
