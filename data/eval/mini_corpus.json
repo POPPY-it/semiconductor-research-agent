@@ -1,0 +1,14 @@
+[
+  {"title": "台积电月度营收", "content": "台积电 TSMC 2026年7月合并营收 4675.8 亿新台币，同比增长 44.7%"},
+  {"title": "台积电先进制程", "content": "台积电 2nm 制程 先进封装 CoWoS HBM 产能爬坡"},
+  {"title": "ASML 季度业绩", "content": "ASML 2026 Q2 净销售额 93 亿欧元，全年指引 430 至 450 亿欧元"},
+  {"title": "NVIDIA 财报", "content": "NVIDIA 提交 10-Q 与 8-K 财报披露"},
+  {"title": "HBM 与 GPU", "content": "HBM 高带宽内存 用于 GPU 加速，台积电 先进封装"},
+  {"title": "存内计算", "content": "存内计算 Processing-in-Memory PIM DRAM 论文"},
+  {"title": "RAG 检索增强", "content": "RAG 检索增强 LLM Agent 智能体"},
+  {"title": "Intel 财报", "content": "Intel 提交 10-Q 8-K 季度报告"},
+  {"title": "先进封装技术", "content": "先进封装 CoWoS 3D 封装 技术"},
+  {"title": "存储三巨头", "content": "三星 SK海力士 美光 DRAM 存储"},
+  {"title": "英伟达算力", "content": "英伟达 GPU 算力 AI芯片"},
+  {"title": "光刻设备", "content": "光刻 EUV ASML 设备"}
+]

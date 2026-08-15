@@ -1,0 +1,10 @@
+[
+  {"question": "台积电 2026 年 7 月营收多少？", "keywords": ["台积电", "TSMC", "revenue"], "facts": ["4675", "44.7"]},
+  {"question": "ASML 2026 年第二季度净销售额和全年指引？", "keywords": ["ASML"], "facts": ["93", "430", "450"]},
+  {"question": "NVIDIA 最近提交了哪些财报？", "keywords": ["NVIDIA", "10-Q", "8-K"], "facts": ["8-K", "10-Q"]},
+  {"question": "HBM 与哪些技术或公司相关？", "keywords": ["HBM", "GPU", "台积电"], "facts": ["GPU", "先进封装"]},
+  {"question": "存内计算相关的论文有哪些？", "keywords": ["Processing-in-Memory", "PIM", "DRAM"], "facts": ["PIM", "DRAM"]},
+  {"question": "RAG 检索增强与什么相关？", "keywords": ["RAG", "LLM", "Agent"], "facts": ["LLM"]},
+  {"question": "Intel 提交了什么财报？", "keywords": ["Intel", "INTEL"], "facts": ["10-Q", "8-K"]},
+  {"question": "先进封装技术有哪些？", "keywords": ["先进封装", "CoWoS", "3D"], "facts": ["CoWoS"]}
+]

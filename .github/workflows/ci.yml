@@ -17,6 +17,8 @@ jobs:
         run: pip install -r requirements.txt -r requirements-dev.txt
       - name: Run tests
         run: python -m pytest tests/ -q
+      - name: RAG retrieval eval (mini, no LLM)
+        run: python scripts/evaluate.py --retrieval-only --mini
 
   frontend:
     runs-on: ubuntu-latest
