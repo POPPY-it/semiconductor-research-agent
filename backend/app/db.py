@@ -37,6 +37,13 @@ CREATE TABLE IF NOT EXISTS qa_messages (
     sources TEXT DEFAULT '[]',
     created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS mcp_servers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE,
+    command TEXT NOT NULL,
+    args TEXT NOT NULL DEFAULT '[]',
+    created_at TEXT NOT NULL
+);
 """
 
 STATUS_QUEUED = "queued"
@@ -183,3 +190,40 @@ class SessionStore:
             {"id": r[0], "title": r[1], "created_at": r[2], "msg_count": r[3]}
             for r in rows
         ]
+
+    # ---- MCP Server 注册表（网页端可管理）----
+
+    def seed_mcp_defaults(self, defaults: list[dict]) -> None:
+        """内置默认 Server（github/fetch），仅在表空时播种。"""
+        count = self._conn.execute("SELECT COUNT(*) FROM mcp_servers").fetchone()[0]
+        if count:
+            return
+        with self._lock:
+            for d in defaults:
+                self._conn.execute(
+                    "INSERT OR IGNORE INTO mcp_servers (name, command, args, created_at) "
+                    "VALUES (?, ?, ?, datetime('now','localtime'))",
+                    (d["name"], d["command"], json.dumps(d.get("args", []))),
+                )
+
+    def list_mcp_servers(self) -> list[dict]:
+        rows = self._conn.execute(
+            "SELECT name, command, args, created_at FROM mcp_servers ORDER BY id"
+        ).fetchall()
+        return [
+            {"name": r[0], "command": r[1], "args": json.loads(r[2] or "[]"), "created_at": r[3]}
+            for r in rows
+        ]
+
+    def add_mcp_server(self, name: str, command: str, args: list[str]) -> None:
+        with self._lock:
+            self._conn.execute(
+                "INSERT OR REPLACE INTO mcp_servers (name, command, args, created_at) "
+                "VALUES (?, ?, ?, datetime('now','localtime'))",
+                (name, command, json.dumps(args or [])),
+            )
+
+    def delete_mcp_server(self, name: str) -> int:
+        with self._lock:
+            cur = self._conn.execute("DELETE FROM mcp_servers WHERE name = ?", (name,))
+        return cur.rowcount

@@ -91,6 +91,15 @@ def create_app(
     if recovered:
         logger.warning("恢复 %d 个中断会话（已标记 error，可重试）", recovered)
 
+    # 播种默认 MCP Server（github/fetch），仅表空时生效
+    import mcp_servers
+
+    _default_mcp = []
+    for _n in ("github", "fetch"):
+        _s = mcp_servers.build_spec(_n)
+        _default_mcp.append({"name": _n, "command": _s.command, "args": _s.args})
+    service.store.seed_mcp_defaults(_default_mcp)
+
     async def require_auth(
         request: Request,
         x_api_token: str | None = Header(default=None),
@@ -209,26 +218,40 @@ def create_app(
     # ---- MCP 工具生态（显性化）----
 
     def _get_mcp_catalog(app):
-        """懒构建并缓存 MCP 工具目录：tool_name -> {server, spec, description}。"""
+        """懒构建并缓存 MCP 工具目录：tool_name -> {server, spec, description}。
+
+        来源为数据库 mcp_servers 注册表（网页端可增删）。
+        注意：MCP Server 以 stdio 子进程运行，等于执行注册的 command——自托管场景安全，
+        多租户公开部署必须加沙箱/白名单（安全边界见 docs）。
+        """
         if not hasattr(app.state, "mcp_catalog"):
-            import mcp_servers
+            import os
+
+            from mcp import StdioServerParameters
+
             from agent.mcp_client import discover
 
-            names = [n.strip() for n in settings.MCP_SERVERS.split(",") if n.strip()]
+            records = app.state.service.store.list_mcp_servers()
             catalog: dict = {}
-            for name in names:
+            for rec in records:
+                spec = StdioServerParameters(
+                    command=rec["command"], args=rec["args"], env=os.environ.copy()
+                )
                 try:
-                    spec = mcp_servers.build_spec(name)
                     for tname, entry in discover([spec]).items():
                         catalog[tname] = {
-                            "server": name,
+                            "server": rec["name"],
                             "spec": spec,
                             "description": entry.get("description", ""),
                         }
                 except Exception as e:  # noqa: BLE001
-                    catalog[f"__error_{name}"] = {"server": name, "error": str(e)[:120]}
+                    catalog[f"__error_{rec['name']}"] = {"server": rec["name"], "error": str(e)[:120]}
             app.state.mcp_catalog = catalog
         return app.state.mcp_catalog
+
+    def _invalidate_mcp_catalog(app) -> None:
+        if hasattr(app.state, "mcp_catalog"):
+            del app.state.mcp_catalog
 
     @app.get("/api/v1/mcp/status", dependencies=[Depends(require_auth)])
     async def mcp_status():
@@ -258,6 +281,27 @@ def create_app(
         args = req.get("arguments") or {}
         result = await asyncio.to_thread(_call_tool, entry["spec"], req["tool_name"], args)
         return {"tool_name": req["tool_name"], "result": result}
+
+    @app.post("/api/v1/mcp/servers", dependencies=[Depends(require_auth)])
+    async def add_mcp_server(req: dict = Body(...)):
+        """网页端添加 MCP Server（command + args，stdio 启动）。
+
+        安全：等价于执行 command——自托管可用；多租户需沙箱/白名单。
+        """
+        name = (req.get("name") or "").strip()
+        command = (req.get("command") or "").strip()
+        args = req.get("args") or []
+        if not name or not command:
+            raise HTTPException(status_code=400, detail="name 与 command 必填")
+        service.store.add_mcp_server(name, command, [str(a) for a in args])
+        _invalidate_mcp_catalog(app)
+        return {"ok": True, "name": name}
+
+    @app.delete("/api/v1/mcp/servers/{name}", dependencies=[Depends(require_auth)])
+    async def delete_mcp_server(name: str):
+        n = service.store.delete_mcp_server(name)
+        _invalidate_mcp_catalog(app)
+        return {"deleted": n}
 
     @app.post("/api/v1/documents", dependencies=[Depends(require_auth)])
     async def upload_document(file: UploadFile = File(...)):

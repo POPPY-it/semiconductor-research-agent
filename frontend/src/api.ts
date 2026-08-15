@@ -129,6 +129,19 @@ export function mcpCall(tool_name: string, args: object) {
   });
 }
 
+export function addMcpServer(name: string, command: string, args: string[]) {
+  return request<{ ok: boolean; name: string }>("/api/v1/mcp/servers", {
+    method: "POST",
+    body: JSON.stringify({ name, command, args }),
+  });
+}
+
+export function deleteMcpServer(name: string) {
+  return request<{ deleted: number }>(`/api/v1/mcp/servers/${encodeURIComponent(name)}`, {
+    method: "DELETE",
+  });
+}
+
 export async function uploadDocument(file: File) {
   const form = new FormData();
   form.append("file", file);

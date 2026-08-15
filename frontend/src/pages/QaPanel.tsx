@@ -36,6 +36,8 @@ import {
   clearMemories,
   mcpStatus,
   mcpCall,
+  addMcpServer,
+  deleteMcpServer,
   QaMessage,
   ConversationSummary,
 } from "../api";
@@ -62,6 +64,9 @@ export default function QaPanel() {
   const [retrieval, setRetrieval] = useState<{ method: string; top_k: number; corpus_size: number } | null>(null);
   const [mcpServers, setMcpServers] = useState<{ name: string; tools: string[] }[]>([]);
   const [mcpTesting, setMcpTesting] = useState(false);
+  const [mcpName, setMcpName] = useState("");
+  const [mcpCommand, setMcpCommand] = useState("");
+  const [mcpArgs, setMcpArgs] = useState("");
   const listRef = useRef<HTMLDivElement>(null);
 
   const refreshMcp = async () => {
@@ -69,6 +74,32 @@ export default function QaPanel() {
       setMcpServers((await mcpStatus()).servers);
     } catch {
       /* 忽略 */
+    }
+  };
+
+  const onAddMcp = async () => {
+    if (!mcpName.trim() || !mcpCommand.trim()) {
+      message.warning("请填写 Server 名称和启动命令");
+      return;
+    }
+    try {
+      const args = mcpArgs.split(",").map((s) => s.trim()).filter(Boolean);
+      await addMcpServer(mcpName.trim(), mcpCommand.trim(), args);
+      message.success(`已添加 MCP Server：${mcpName}`);
+      setMcpName(""); setMcpCommand(""); setMcpArgs("");
+      refreshMcp();
+    } catch (e) {
+      message.error(String(e));
+    }
+  };
+
+  const onDeleteMcp = async (name: string) => {
+    try {
+      await deleteMcpServer(name);
+      message.success(`已删除 ${name}`);
+      refreshMcp();
+    } catch (e) {
+      message.error(String(e));
     }
   };
 
@@ -349,20 +380,35 @@ export default function QaPanel() {
                 children: (
                   <div>
                     {mcpServers.length === 0 ? (
-                      <Text type="secondary" style={{ fontSize: 12 }}>未检测到 MCP Server，请检查 MCP_SERVERS 配置</Text>
+                      <Text type="secondary" style={{ fontSize: 12 }}>未检测到 MCP Server</Text>
                     ) : (
                       mcpServers.map((s) => (
-                        <div key={s.name} style={{ marginBottom: 8 }}>
-                          <Tag color="blue" style={{ fontWeight: 600 }}>{s.name}</Tag>
-                          <div style={{ paddingLeft: 8 }}>
+                        <div key={s.name} style={{ marginBottom: 8, padding: "6px 8px", background: "#f8fafc", borderRadius: 6, border: "1px solid #e2e8f0" }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                            <Tag color="blue" style={{ fontWeight: 600, margin: 0 }}>{s.name}</Tag>
+                            <Button size="small" danger type="link" style={{ padding: 0 }} onClick={() => onDeleteMcp(s.name)}>删除</Button>
+                          </div>
+                          <div style={{ paddingLeft: 4, marginTop: 4 }}>
                             {s.tools.map((t) => (
-                              <Tag key={t} style={{ fontSize: 11 }}>{t}</Tag>
+                              <Tag key={t} style={{ fontSize: 11, margin: "2px" }}>{t}</Tag>
                             ))}
                           </div>
                         </div>
                       ))
                     )}
-                    <Button size="small" type="primary" loading={mcpTesting} onClick={testMcp} style={{ marginTop: 4 }}>
+
+                    <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px dashed #e2e8f0" }}>
+                      <Text strong style={{ fontSize: 12 }}>➕ 添加 MCP Server</Text>
+                      <Input size="small" placeholder="名称（如 weather）" value={mcpName} onChange={(e) => setMcpName(e.target.value)} style={{ marginTop: 6 }} />
+                      <Input size="small" placeholder="启动命令（如 npx -y @modelcontextprotocol/server-weather 或 python -m xxx）" value={mcpCommand} onChange={(e) => setMcpCommand(e.target.value)} style={{ marginTop: 6 }} />
+                      <Input size="small" placeholder="参数，逗号分隔（可空）" value={mcpArgs} onChange={(e) => setMcpArgs(e.target.value)} style={{ marginTop: 6 }} />
+                      <Button size="small" type="primary" onClick={onAddMcp} style={{ marginTop: 6 }}>添加</Button>
+                      <Text type="secondary" style={{ fontSize: 11, display: "block", marginTop: 4 }}>
+                        例：命令填 npx -y @modelcontextprotocol/server-weather，参数填 --help
+                      </Text>
+                    </div>
+
+                    <Button size="small" type="primary" loading={mcpTesting} onClick={testMcp} style={{ marginTop: 8 }}>
                       实测：GitHub 仓库搜索
                     </Button>
                   </div>

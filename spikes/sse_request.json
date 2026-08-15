@@ -1,1 +1,1 @@
-{"tool_name": "search_github_repos", "arguments": {"query": "GraphRAG", "limit": 3}}
+{"name": "fetch2", "command": "D:\\qwen3.6\\semiconductor-agent\\.venv\\Scripts\\python.exe", "args": ["D:\\qwen3.6\\semiconductor-agent\\mcp_servers\\fetch_server.py"]}
