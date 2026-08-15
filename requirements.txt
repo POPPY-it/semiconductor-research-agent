@@ -12,3 +12,5 @@ trafilatura==2.0.0
 pymupdf==1.26.5
 python-multipart==0.0.20
 matplotlib==3.10.9
+mcp==1.29.0
+fastmcp==3.4.7

@@ -93,6 +93,18 @@ class ReportPipeline:
     def __init__(self, retriever, store):
         self.retriever = retriever
         self.store = store
+        self._mcp_tool = None
+
+    def _get_mcp_tool(self):
+        """懒加载 MCP 工具（首次调用时连接各 MCP Server 发现工具）。"""
+        if self._mcp_tool is None:
+            import mcp_servers
+            from agent.mcp_client import build_mcp_tool
+
+            names = [n.strip() for n in settings.MCP_SERVERS.split(",") if n.strip()]
+            specs = [mcp_servers.build_spec(n) for n in names]
+            self._mcp_tool = build_mcp_tool(specs) if specs else None
+        return self._mcp_tool
 
     def rebuild(self) -> None:
         """重建知识库索引（新文档入库后调用）。"""
@@ -272,14 +284,18 @@ class ReportPipeline:
         )
         if template.get("cite_format"):
             extra += f"7) {template['cite_format']}。"
+        mcp_tool = self._get_mcp_tool()
+        base_tools = [search_knowledge, query_filings, search_arxiv, search_semantic_scholar]
+        if mcp_tool is not None:
+            base_tools.append(mcp_tool)
         researcher = CodeAgent(
-            tools=[search_knowledge, query_filings, search_arxiv, search_semantic_scholar, generate_chart],
+            tools=base_tools + [generate_chart],
             model=model,
             max_steps=12,
             instructions=RESEARCHER_INSTRUCTIONS.format(extra=extra),
         )
         qa = CodeAgent(
-            tools=[search_knowledge, query_filings, search_arxiv, search_semantic_scholar],
+            tools=base_tools,
             model=model,
             max_steps=8,
             instructions=QA_INSTRUCTIONS,
@@ -360,8 +376,12 @@ class ReportPipeline:
         model = BudgetedModel(
             build_model(), budget_chars=max(100_000, settings.TOKEN_BUDGET_CHARS // 10)
         )
+        qa_tools = [search_knowledge, query_filings, search_arxiv, search_semantic_scholar]
+        mcp_tool = self._get_mcp_tool()
+        if mcp_tool is not None:
+            qa_tools.append(mcp_tool)
         qa_agent = CodeAgent(
-            tools=[search_knowledge, query_filings, search_arxiv, search_semantic_scholar],
+            tools=qa_tools,
             model=model,
             max_steps=4,
             instructions=(
