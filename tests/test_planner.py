@@ -1,0 +1,99 @@
+"""P1-3 显式规划测试：规则模板规划内容 + generate 注入规划 + 轨迹落盘。"""
+import sys
+from pathlib import Path
+
+import pytest
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from agent.planner import build_plan  # noqa: E402
+
+
+def test_build_plan_contains_outline_and_constraints():
+    template = {
+        "sections": "摘要/公司分析/财务表现/风险与展望",
+        "min_words": 600,
+    }
+    plan = build_plan("台积电基本面", template)
+    # 大纲分节
+    assert "大纲（4 节）" in plan
+    assert "摘要" in plan and "财务表现" in plan
+    # 财务节建议优先 SEC
+    assert "query_filings" in plan
+    # 两条硬约束（与 Harness 无引用数字率口径一致）
+    assert "精确财务数字" in plan and "SEC" in plan
+    assert "禁止出现无来源的精确数字" in plan
+
+
+def test_build_plan_default_sections_when_template_empty():
+    plan = build_plan("任意选题", None)
+    assert "大纲（4 节）" in plan
+    assert "数据透视" in plan
+
+
+def test_generate_injects_plan_into_researcher_task(tmp_path, monkeypatch):
+    """回归：Researcher 首轮任务必须带规划前缀；轨迹 meta 记录 plan。"""
+    from agent import orchestrator as orch
+
+    calls: dict[str, list[str]] = {"tasks": []}
+
+    class FakeModel:
+        def __init__(self, tag="m"):
+            self.tag = tag
+
+    class FakeResearcher:
+        def __init__(self, model):
+            self.model = model
+
+        def run(self, task, reset=True):
+            calls["tasks"].append(task)
+            return "# 报告\n\n正文"
+
+    class FakeQA:
+        def __init__(self, model):
+            self.model = model
+
+        def run(self, task, reset=True):
+            return {"passed": True, "issues": []}
+
+    class FakeRetriever:
+        documents = {}
+
+        def search_reranked(self, q, top_k=5):
+            return []
+
+    class FakeStore:
+        def query_articles(self, **kw):
+            return []
+
+    monkeypatch.setattr(orch, "build_model", lambda: FakeModel())
+    monkeypatch.setattr(orch, "build_fallback_model", lambda: None)
+    monkeypatch.setattr(orch.settings, "TOKEN_BUDGET_CHARS", 1000000)
+    monkeypatch.setattr(orch.settings, "MEMORY_DB", tmp_path / "mem.db")
+    monkeypatch.setattr(orch.settings, "VECTOR_DIR", tmp_path / "vec")
+    monkeypatch.setattr(orch.settings, "TRACE_DIR", tmp_path / "traces")
+    monkeypatch.setattr(orch, "CodeAgent", lambda **kw: None)  # 不会被用到
+    monkeypatch.setattr(
+        orch.ReportPipeline,
+        "_build_agents",
+        lambda self, model, report_type="weekly": (FakeResearcher(model), FakeQA(model)),
+    )
+    monkeypatch.setattr(orch.ReportPipeline, "_get_mcp_tools", lambda self: [])
+
+    pipe = orch.ReportPipeline(FakeRetriever(), FakeStore())
+    result = pipe.generate("台积电基本面", report_type="basic_research")
+
+    first_task = calls["tasks"][0]
+    assert "撰写规划" in first_task
+    assert "两条硬约束" in first_task
+    assert "禁止出现无来源的精确数字" in first_task
+    # 轨迹 meta 记录 plan（P1-3 可回放）
+    import json
+
+    trace_files = list((tmp_path / "traces").glob("*.jsonl"))
+    record = json.loads(trace_files[0].read_text(encoding="utf-8"))
+    assert "plan" in record["meta"]
+    assert "大纲" in record["meta"]["plan"]
+    # basic_research 合规：报告自动追加投资建议免责声明
+    assert result["report"].startswith("# 报告\n\n正文")
+    assert "不构成任何投资建议" in result["report"]

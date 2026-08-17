@@ -49,7 +49,9 @@ def default_pipeline_factory():
 
 class SessionCreate(BaseModel):
     topic: str = Field(..., min_length=4, max_length=500)
-    report_type: str = Field("weekly", pattern="^(daily|weekly|deep|survey|medical_survey)$")
+    report_type: str = Field(
+        "weekly", pattern="^(daily|weekly|deep|survey|medical_survey|basic_research)$"
+    )
 
 
 class LoginRequest(BaseModel):

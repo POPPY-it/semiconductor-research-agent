@@ -28,6 +28,8 @@
 4. **评测有方法论反思**：真实语料 Recall@5=0.127 已归因到粗粒度标注；faithfulness 偏低归因到 judge 上下文（`docs/p3-eval-report.md`）。
 5. **MCP 是真接上的**：`github` / `fetch` 两个 stdio Server，网页端可增删管理；每个 MCP 工具映射为**独立 Tool**（schema 来自 MCP inputSchema），不再用 `mcp_call` 调度器。
 6. **工具层可治理**：每个工具一份 schema 元信息（必填/范围/超时，`agent/tools.py` 的 `TOOL_META`）；外部 API（arXiv/S2/PubMed）统一超时 + 429/5xx 指数退避 + 降级文案——**人为注入故障（`SIMULATED_API_FAILURES`）任务仍能用知识库+SEC 出报告**；参数校验失败回给模型「哪错了」，不抛到编排器外面；写稿与问答检索统一走 `search_reranked`。
+7. **合规边界写进模板**：`basic_research`（研投）禁止目标价/估值/买卖建议、财务数字强制 SEC 来源、自动追加免责声明；`medical_survey` 禁止诊疗建议并声明证据等级（`tests/test_orchestrator_units.py` 断言）。
+8. **先规划后执行（P1-3）**：Researcher 动笔前注入规则模板规划（大纲分节 + 每节检索建议 + 「数字必须来自 SEC/知识库、禁止无来源精确数字」两条硬约束，`agent/planner.py`），规划随轨迹落盘可回放；质检要求问题注明所属小节。
 
 ## 技术栈
 
@@ -53,6 +55,7 @@ SEC EDGAR 财报（32 篇全文）、arXiv 论文（49 篇）、PubMed 生物医
 | 类型 | 场景 | 定位 |
 |---|---|---|
 | daily / weekly / deep | 半导体行业研报（财报 + 新闻） | **主线** |
+| basic_research | 基本面分析（研投：财务表现/竞争力，仅研究不构成投资建议，SEC 来源强制） | **主线** |
 | survey | 学术调研（arXiv + PubMed 实时检索） | 扩展点 |
 | medical_survey | 医学综述（PICO + 证据等级 + 免责声明） | 扩展点 |
 

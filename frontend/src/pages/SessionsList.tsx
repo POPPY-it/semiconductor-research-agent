@@ -25,6 +25,8 @@ const TYPE_CONFIG: Record<string, { text: string; color: string; icon: React.Rea
   weekly: { text: "行业周报", color: "blue", icon: <CalendarOutlined /> },
   deep: { text: "深度研报", color: "purple", icon: <BookOutlined /> },
   survey: { text: "学术调研", color: "cyan", icon: <CompassOutlined /> },
+  medical_survey: { text: "医学综述", color: "volcano", icon: <FileTextOutlined /> },
+  basic_research: { text: "基本面分析", color: "geekblue", icon: <FileTextOutlined /> },
 };
 
 export default function SessionsList({

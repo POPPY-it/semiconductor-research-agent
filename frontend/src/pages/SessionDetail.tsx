@@ -48,6 +48,8 @@ const TYPE_NAME: Record<string, string> = {
   weekly: "行业周报",
   deep: "深度研报",
   survey: "学术文献调研",
+  medical_survey: "医学综述",
+  basic_research: "基本面分析（研投）",
 };
 
 export default function SessionDetail({

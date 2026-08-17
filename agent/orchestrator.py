@@ -42,6 +42,8 @@ RESEARCHER_INSTRUCTIONS = (
 
 QA_INSTRUCTIONS = (
     "你是事实质检员。校验给定报告的每个数字与论断是否能被检索结果支持。\n"
+    "要求：问题必须注明所属小节（如『第2节 数据透视：…』）；"
+    "无来源的精确数字必须列进 issues。\n"
     "最终必须调用 final_answer 并直接传入 dict（不要输出任何文字说明），例如：\n"
     "final_answer({\"passed\": true, \"issues\": [\"问题1\",\"问题2\"]})"
 )
@@ -77,6 +79,20 @@ REPORT_TEMPLATES = {
         "disclaimer": (
             "本报告基于公开医学文献自动生成，仅供科研参考，不构成任何诊疗或用药建议；"
             "涉及临床决策请咨询执业医师。"
+        ),
+    },
+    "basic_research": {
+        "label": "基本面分析（研投）",
+        "sections": "公司概况/业务与产品结构/财务表现（营收、毛利率、净利率、现金流）/资产负债表要点/竞争力与护城河/风险与展望",
+        "min_words": 600,
+        "safety": (
+            "本报告为基本面研究：只陈述公开披露事实并做中性分析，"
+            "禁止给出目标价、估值结论、买入/卖出/持有等投资建议或仓位建议；"
+            "所有财务数字必须来自 SEC 财报披露并注明来源链接。"
+        ),
+        "disclaimer": (
+            "本报告基于公开财报与披露信息自动生成，仅供研究参考，不构成任何投资建议；"
+            "投资决策请独立判断并咨询专业机构。"
         ),
     },
 }
@@ -272,7 +288,11 @@ class ReportPipeline:
                 )
         except Exception:  # noqa: BLE001
             pass
-        draft = guarded_run("researcher", mem_ctx + f"撰写研报：{topic}")
+        # P1-3 显式规划：先出大纲（规则模板，零成本、可评测），随轨迹落盘
+        from agent.planner import build_plan
+
+        plan = build_plan(topic, REPORT_TEMPLATES.get(report_type))
+        draft = guarded_run("researcher", mem_ctx + plan + "\n\n" + f"撰写研报：{topic}")
         verdict: dict | None = None
         rounds = 0
         for rounds in range(1, 3):  # 质检不过最多修订 2 轮
@@ -313,6 +333,7 @@ class ReportPipeline:
             all_steps,
             meta={
                 "report_type": report_type,
+                "plan": plan,  # P1-3：显式规划随轨迹落盘，可回放"先规划后执行"
                 "verdict": verdict,
                 "revision_rounds": rounds,
                 "model_used": "fallback" if used_fallback[0] else "primary",

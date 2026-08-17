@@ -9,7 +9,10 @@
 > **整改进度**：P0-1 口径统一 ✅ → 3 个 bug 修复 ✅ → P0-2 轨迹落盘 ✅ → P0-3 局部修订 ✅ →
 > P1-1 20 条评测集 + Harness ✅（首跑基线 `eval/metrics.md`）→ **P1-2 工具治理 ✅**
 > （schema 元信息 / 超时退避降级 / MCP 独立 Tool / 写稿问答检索统一，见 README「工具治理」节）→
-> P1-3 显式规划（大纲 → 按节写 → 按节质检）⏳ 待做。
+> **P1-3 显式规划 ✅**（规则模板规划：大纲 + 每节检索建议 + 数字纪律，随轨迹落盘；
+> 质检按节出问题，`agent/planner.py` + `tests/test_planner.py`）→
+> **研投基本面分析 ✅**（basic_research 模板 + 合规免责声明 + t21~t24 评测任务）→
+> 全量 20 条 Harness 重跑 ⏳ 进行中（P1-2 工具检测修复后刷新基线）。
 
 > 定位：基于开源内核 [smolagents](https://github.com/huggingface/smolagents)（Hugging Face）的二次开发，
 > 打造一个**从数据采集到研报产出、可部署上线的行业 Agent**。

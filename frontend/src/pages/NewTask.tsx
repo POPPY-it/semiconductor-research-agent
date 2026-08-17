@@ -7,6 +7,7 @@ import {
   ThunderboltOutlined,
   CompassOutlined,
   MedicineBoxOutlined,
+  FundOutlined,
   InfoCircleOutlined
 } from "@ant-design/icons";
 import { createSession } from "../api";
@@ -43,6 +44,12 @@ const TYPE_CONFIG = [
     title: "医学综述",
     desc: "500+ 字 | PubMed 文献、PICO 框架与证据等级（仅科研参考）",
     icon: <MedicineBoxOutlined style={{ color: "#ef4444" }} />
+  },
+  {
+    key: "basic_research",
+    title: "基本面分析（研投）",
+    desc: "600+ 字 | 公司财务全景：营收/毛利率/现金流/竞争力（仅研究，不构成投资建议）",
+    icon: <FundOutlined style={{ color: "#0d9488" }} />
   }
 ];
 

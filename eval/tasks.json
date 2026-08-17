@@ -158,5 +158,37 @@
     "required_tools": ["search_graph", "search_knowledge", "query_filings"],
     "checkpoints": ["用图谱梳理产业链实体", "财报数据带 SEC 链接", "无来源的精确数字应避免"],
     "facts": ["台积电、ASML、NVIDIA、Intel 均出现在语料中"]
+  },
+  {
+    "id": "t21",
+    "topic": "台积电 2026 年 7 月营收基本面快照",
+    "report_type": "basic_research",
+    "required_tools": ["query_filings", "search_knowledge"],
+    "checkpoints": ["给出月度营收精确金额与同比/环比增速", "所有财务数字带 SEC 来源链接", "报告含投资建议免责声明", "不得出现目标价或买卖建议"],
+    "facts": ["2026年7月合并营收约4,675.8亿新台币", "同比约+44.7%", "环比约+5.6%"]
+  },
+  {
+    "id": "t22",
+    "topic": "ASML 2026 上半年业绩与全年指引基本面分析",
+    "report_type": "basic_research",
+    "required_tools": ["query_filings", "search_knowledge"],
+    "checkpoints": ["给出 Q1/Q2 总净销售额与净收入", "给出全年指引区间与毛利率指引", "财务数字带 SEC 6-K 链接", "含免责声明且无投资建议"],
+    "facts": ["Q1 总净销售额约88亿欧元 / 净收入约28亿欧元", "Q2 总净销售额约93亿欧元 / 净收入约29亿欧元", "全年指引430-450亿欧元", "毛利率指引54%-56%"]
+  },
+  {
+    "id": "t23",
+    "topic": "台积电与 ASML 营收结构对比（基本面视角）",
+    "report_type": "basic_research",
+    "required_tools": ["query_filings", "search_knowledge", "generate_chart"],
+    "checkpoints": ["两张表或图对比营收", "所有数字带来源链接", "图表用 generate_chart 生成", "含免责声明"],
+    "facts": ["ASML Q1 88亿欧元 / Q2 93亿欧元", "台积电6月4,426.8亿 / 7月4,675.8亿新台币"]
+  },
+  {
+    "id": "t24",
+    "topic": "台积电 2026 年上半年营收与成本结构基本面分析",
+    "report_type": "basic_research",
+    "required_tools": ["query_filings", "search_knowledge"],
+    "checkpoints": ["给出月度/累计营收数据", "带 SEC 来源链接", "报告含免责声明", "无买卖建议或目标价"],
+    "facts": ["6月4,426.8亿新台币（同比+67.9%）", "7月4,675.8亿新台币（同比+44.7%）", "1-7月累计约28,720.6亿新台币（累计同比约+37.0%）"]
   }
 ]
