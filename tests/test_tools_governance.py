@@ -300,6 +300,116 @@ def test_mcp_tool_forward_degrades_on_error(monkeypatch):
     assert "调用失败" in out and "search_knowledge" in out  # 降级文案带替代工具提示
 
 
+# ---------- 7. HTTP MCP（搜索代理网关） ----------
+
+def test_build_mcp_http_tools_filters_and_maps(monkeypatch):
+    """HTTP 网关工具：后缀过滤（不一次挂 24 个）+ schema 映射为独立 Tool。"""
+    from agent import mcp_client as mc
+
+    fake_tools = []
+    for name, req in [
+        ("search_proxy_serper_news", ["q"]),
+        ("search_proxy_tavily_search", ["query"]),
+        ("search_proxy_serper_search", ["q"]),
+        ("search_proxy_exa_answer", ["query"]),
+    ]:
+        t = type("T", (), {
+            "name": name,
+            "description": f"{name} 描述",
+            "inputSchema": {"type": "object", "properties": {r: {"type": "string"} for r in req}},
+        })()
+        fake_tools.append(t)
+
+    monkeypatch.setattr(mc, "_http_connect_and_list", lambda url, headers: fake_tools)
+
+    tools = mc.build_mcp_http_tools(
+        "https://x/mcp", {"Authorization": "Bearer t"}, allow=["serper_news", "tavily_search"]
+    )
+    assert sorted(t.name for t in tools) == [
+        "search_proxy_serper_news",
+        "search_proxy_tavily_search",
+    ]
+    news = [t for t in tools if t.name.endswith("serper_news")][0]
+    assert news.inputs["q"]["type"] == "string"
+    assert "http" in news.description  # 描述标注传输类型
+
+
+def test_http_mcp_tool_forward_dispatches_http(monkeypatch):
+    """forward 必须走 HTTP 调用路径（含总超时），异常降级为文案。"""
+    from agent import mcp_client as mc
+
+    monkeypatch.setattr(
+        mc,
+        "_http_connect_and_list",
+        lambda url, headers: [
+            type("T", (), {
+                "name": "search_proxy_serper_news",
+                "description": "d",
+                "inputSchema": {"type": "object", "properties": {"q": {"type": "string"}}},
+            })()
+        ],
+    )
+    calls = {}
+
+    def fake_http(url, headers, name, args, timeout=45.0):
+        calls.update(url=url, name=name, args=args)
+        return '{"organic": []}'
+
+    monkeypatch.setattr(mc, "_http_call_tool", fake_http)
+    tools = mc.build_mcp_http_tools("https://x/mcp", {"Authorization": "Bearer t"})
+    out = tools[0](q="TSMC")
+    assert out == '{"organic": []}'
+    assert calls == {"url": "https://x/mcp", "name": "search_proxy_serper_news", "args": {"q": "TSMC"}}
+
+    # 失败 → 降级文案
+    def boom(*a, **k):
+        raise TimeoutError("网关超时")
+
+    monkeypatch.setattr(mc, "_http_call_tool", boom)
+    out2 = tools[0](q="TSMC")
+    assert "调用失败" in out2 and "search_knowledge" in out2
+
+
+def test_orchestrator_merges_http_mcp_tools(monkeypatch):
+    """settings 配置了 HTTP 网关时，_get_mcp_tools 合并 stdio + http 工具。"""
+    from agent import orchestrator as orch
+
+    class FakeRetriever:
+        documents = {}
+
+        def search_reranked(self, q, top_k=5):
+            return []
+
+    class FakeStore:
+        def query_articles(self, **kw):
+            return []
+
+    monkeypatch.setattr(orch.settings, "MCP_SERVERS", "github")
+    monkeypatch.setattr(orch.settings, "MCP_HTTP_URL", "https://x/mcp")
+    monkeypatch.setattr(orch.settings, "MCP_HTTP_TOKEN", "secret-token")
+    monkeypatch.setattr(orch.settings, "MCP_HTTP_TOOLS", "serper_news")
+
+    pipe = orch.ReportPipeline(FakeRetriever(), FakeStore())
+    called = {}
+
+    def fake_stdio(specs):
+        called["stdio"] = True
+        return [type("T", (), {"name": "search_github_repos", "description": "s", "inputs": {}, "output_type": "string"})()]
+
+    def fake_http(url, headers, allow=None):
+        called["http"] = (url, headers, allow)
+        return [type("T", (), {"name": "search_proxy_serper_news", "description": "h", "inputs": {}, "output_type": "string"})()]
+
+    monkeypatch.setattr("agent.mcp_client.build_mcp_tools", fake_stdio)
+    monkeypatch.setattr("agent.mcp_client.build_mcp_http_tools", fake_http)
+
+    tools = pipe._get_mcp_tools()
+    names = sorted(t.name for t in tools)
+    assert names == ["search_github_repos", "search_proxy_serper_news"]
+    assert called["http"][1] == {"Authorization": "Bearer secret-token"}
+    assert called["http"][2] == ["serper_news"]
+
+
 # ---------- 6. 写稿/问答检索统一（P1-2 §4.5） ----------
 
 def test_collect_steps_detects_tools_from_python_interpreter_arguments():

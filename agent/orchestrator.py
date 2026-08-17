@@ -173,14 +173,30 @@ class ReportPipeline:
             pass
 
     def _get_mcp_tools(self):
-        """懒加载 MCP 工具（首次调用时连接各 MCP Server，每个工具独立 Tool）。"""
+        """懒加载 MCP 工具（首次调用时连接各 MCP Server，每个工具独立 Tool）。
+
+        两类来源：
+        1. stdio Server（github/fetch，settings.MCP_SERVERS）；
+        2. HTTP MCP 端点（可选搜索网关，settings.MCP_HTTP_URL/TOKEN/TOOLS，
+           token 从 .env 读取，不进 git）。
+        """
         if self._mcp_tools is None:
             import mcp_servers
-            from agent.mcp_client import build_mcp_tools
+            from agent.mcp_client import build_mcp_http_tools, build_mcp_tools
 
+            tools: list = []
             names = [n.strip() for n in settings.MCP_SERVERS.split(",") if n.strip()]
-            specs = [mcp_servers.build_spec(n) for n in names]
-            self._mcp_tools = build_mcp_tools(specs) if specs else []
+            if names:
+                specs = [mcp_servers.build_spec(n) for n in names]
+                tools += build_mcp_tools(specs)
+            if settings.MCP_HTTP_URL and settings.MCP_HTTP_TOKEN:
+                allow = [t.strip() for t in settings.MCP_HTTP_TOOLS.split(",") if t.strip()]
+                tools += build_mcp_http_tools(
+                    settings.MCP_HTTP_URL,
+                    {"Authorization": f"Bearer {settings.MCP_HTTP_TOKEN}"},
+                    allow=allow,
+                )
+            self._mcp_tools = tools
         return self._mcp_tools
 
     def rebuild(self) -> None:

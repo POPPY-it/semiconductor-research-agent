@@ -49,6 +49,14 @@ class Settings:
     SIMULATED_API_FAILURES: str = os.getenv("SIMULATED_API_FAILURES", "")
     # MCP：要接入的 MCP Server 列表（逗号分隔），当前支持 github/fetch
     MCP_SERVERS: str = os.getenv("MCP_SERVERS", "github,fetch")
+    # HTTP MCP（可选）：搜索代理网关（如 Serper/Tavily/Exa 聚合）。
+    # Token 只从环境读取，**禁止提交 git**；MCP_HTTP_TOOLS 为允许挂载的工具名
+    # （按后缀匹配网关工具名，如 serper_news 匹配 search_proxy_serper_news）。
+    MCP_HTTP_URL: str = os.getenv("MCP_HTTP_URL", "")
+    MCP_HTTP_TOKEN: str = os.getenv("MCP_HTTP_TOKEN", "")
+    MCP_HTTP_TOOLS: str = os.getenv(
+        "MCP_HTTP_TOOLS", "serper_news,tavily_search,serper_scholar,serper_patents"
+    )
     GITHUB_TOKEN: str = os.getenv("GITHUB_TOKEN", "")
 
     @classmethod

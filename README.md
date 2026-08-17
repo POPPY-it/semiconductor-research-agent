@@ -26,7 +26,7 @@
 2. **质检有产品策略**：`caveat` 打横幅、`reject` 拒交；质检是"可验证性门槛"而非真伪判定（`docs/w4-m2m3-report.md`）。
 3. **服务层不是空壳**：Cookie 鉴权、限流、中断会话恢复、任务重试、索引与生成互斥、Prometheus 指标（`tests/test_enterprise.py` 覆盖）。
 4. **评测有方法论反思**：真实语料 Recall@5=0.127 已归因到粗粒度标注；faithfulness 偏低归因到 judge 上下文（`docs/p3-eval-report.md`）。
-5. **MCP 是真接上的**：`github` / `fetch` 两个 stdio Server，网页端可增删管理；每个 MCP 工具映射为**独立 Tool**（schema 来自 MCP inputSchema），不再用 `mcp_call` 调度器。
+5. **MCP 是真接上的**：`github` / `fetch` 两个 stdio Server，网页端可增删管理；每个 MCP 工具映射为**独立 Tool**（schema 来自 MCP inputSchema），不再用 `mcp_call` 调度器。支持 **HTTP 传输的 MCP 端点**（如搜索代理网关）：`.env` 配置 `MCP_HTTP_URL` + `MCP_HTTP_TOKEN`（不进 git）+ `MCP_HTTP_TOOLS`（后缀白名单，避免一次挂 24 个工具），默认挂 `serper_news` / `tavily_search` / `serper_scholar` / `serper_patents` 四个实时搜索工具（实测：`serper_news` 返回中文行业新闻、`tavily_search` 命中台积电 7 月营收公告）。
 6. **工具层可治理**：每个工具一份 schema 元信息（必填/范围/超时，`agent/tools.py` 的 `TOOL_META`）；外部 API（arXiv/S2/PubMed）统一超时 + 429/5xx 指数退避 + 降级文案——**人为注入故障（`SIMULATED_API_FAILURES`）任务仍能用知识库+SEC 出报告**；参数校验失败回给模型「哪错了」，不抛到编排器外面；写稿与问答检索统一走 `search_reranked`。
 7. **合规边界写进模板**：`basic_research`（研投）禁止目标价/估值/买卖建议、财务数字强制 SEC 来源、自动追加免责声明；`medical_survey` 禁止诊疗建议并声明证据等级（`tests/test_orchestrator_units.py` 断言）。
 8. **先规划后执行（P1-3）**：Researcher 动笔前注入规则模板规划（大纲分节 + 每节检索建议 + 「数字必须来自 SEC/知识库、禁止无来源精确数字」两条硬约束，`agent/planner.py`），规划随轨迹落盘可回放；质检要求问题注明所属小节。
