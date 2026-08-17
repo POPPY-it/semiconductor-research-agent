@@ -76,18 +76,30 @@ REPORT_TEMPLATES = {
 
 
 def _extract_json(text) -> dict | None:
-    """质检输出可能是 dict（final_answer 直接传对象）或包裹在文字里的 JSON 字符串。"""
+    """质检输出可能是 dict（final_answer 直接传对象）或包裹在文字里的 JSON 字符串。
+
+    解析策略：从每个 '{' 起做花括号配对，取第一个能解析成功的完整对象——
+    避免贪心正则 `{.*}` 在多个花括号/嵌套结构下吸错。
+    """
     if isinstance(text, dict):
         return text
     if not isinstance(text, str):
         text = str(text)
-    m = re.search(r"\{.*\}", text, flags=re.S)
-    if not m:
-        return None
-    try:
-        return json.loads(m.group(0))
-    except json.JSONDecodeError:
-        return None
+    for start in [m.start() for m in re.finditer(r"\{", text)]:
+        depth = 0
+        for i in range(start, len(text)):
+            ch = text[i]
+            if ch == "{":
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+                if depth == 0:
+                    candidate = text[start : i + 1]
+                    try:
+                        return json.loads(candidate)
+                    except json.JSONDecodeError:
+                        break  # 该括号对不是 JSON，试下一个 '{'
+    return None
 
 
 def _extract_budget_error(exc: Exception) -> BudgetExceededError | None:
@@ -407,9 +419,17 @@ class ReportPipeline:
             researcher, qa = self._build_agents(fb, report_type)
             used_fallback[0] = True
 
-        def guarded_run(agent, task, reset: bool = True):
+        def current_agent(role: str):
+            return researcher if role == "researcher" else qa
+
+        def guarded_run(role: str, task, reset: bool = True):
+            """按角色实时取当前 Agent 执行；连接类错误触发一次备用模型切换后重试。
+
+            注意：switch_to_fallback 会重建 researcher/qa，因此重试必须重新取当前实例
+            （修复：旧实现用参数 agent，切换后仍跑旧模型）。
+            """
             try:
-                return agent.run(task, reset=reset)
+                return current_agent(role).run(task, reset=reset)
             except Exception as e:  # noqa: BLE001
                 budget_err = _extract_budget_error(e)
                 if budget_err is not None:
@@ -419,8 +439,8 @@ class ReportPipeline:
                     and not used_fallback[0]
                     and is_connection_error(e)
                 ):
-                    switch_to_fallback()
-                    return agent.run(task, reset=reset)
+                    switch_to_fallback()  # 重建 researcher/qa（备用模型）
+                    return current_agent(role).run(task, reset=reset)  # 用新实例重试
                 raise
 
         mem_ctx = ""
@@ -434,13 +454,13 @@ class ReportPipeline:
                 )
         except Exception:  # noqa: BLE001
             pass
-        draft = guarded_run(researcher, mem_ctx + f"撰写研报：{topic}")
+        draft = guarded_run("researcher", mem_ctx + f"撰写研报：{topic}")
         verdict: dict | None = None
         rounds = 0
         for rounds in range(1, 3):  # 质检不过最多修订 2 轮
             verdict = None
             for _attempt in range(2):  # 解析失败重试一次
-                verdict = _extract_json(guarded_run(qa, f"请校验以下报告：\n\n{draft}", reset=False))
+                verdict = _extract_json(guarded_run("qa", f"请校验以下报告：\n\n{draft}", reset=False))
                 if verdict is not None:
                     break
             if verdict is None:
@@ -448,7 +468,7 @@ class ReportPipeline:
             if verdict.get("passed"):
                 break
             draft = guarded_run(
-                researcher,
+                "researcher",
                 f"质检反馈的问题：{json.dumps(verdict.get('issues', []), ensure_ascii=False)}"
                 "。请修订报告并重新输出完整 Markdown 报告。",
                 reset=False,
@@ -510,7 +530,7 @@ class ReportPipeline:
                     lines.append(f"答：{content}")
             if lines:
                 context = "对话历史（仅用于理解上下文与指代，不得重复历史答案）：\n" + "\n\n".join(lines) + "\n\n"
-        # 跨会话长期记忆（Mem0-style）：召回相关偏好注入上下文
+        # 跨会话偏好记忆：召回相关偏好注入上下文
         try:
             memories = self._get_memory_store().search(question, top_k=4)
             if memories:

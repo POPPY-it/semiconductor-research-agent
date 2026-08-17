@@ -39,13 +39,13 @@ export default function App() {
           </div>
           <div>
             <div className="brand-title">
-              半导体研报与学术调研 Agent
+              半导体研究 Agent
               <Tag color="blue" style={{ fontSize: 11, padding: "0 6px", height: 20, lineHeight: "18px", border: "none", fontWeight: 600 }}>
                 Enterprise v0.3.0
               </Tag>
             </div>
             <div className="brand-subtitle">
-              Intelligent Semiconductor Research & Literature Analysis Platform
+              Semiconductor Research Agent · 检索 + 规划 + 质检
             </div>
           </div>
         </div>

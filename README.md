@@ -1,52 +1,66 @@
-# 多领域研究助手：半导体研报 + 学术调研 + 生物医药（Research Agent）
+# 半导体研究 Agent（Semiconductor Research Agent）
 
 > GitHub：https://github.com/POPPY-it/semiconductor-research-agent
-> 秋招项目：基于 [smolagents](https://github.com/huggingface/smolagents)（Apache-2.0）内核二次开发的
-> **多领域研究助手**——输入选题，自动完成数据采集、混合检索、多 Agent 协作撰写、事实质检，产出带引用溯源的研究报告。
 >
-> 三领域：**行业研报**（SEC 财报 + 行业新闻）、**学术调研**（arXiv）、**生物医药**（PubMed），实时检索 + 参考文献列表。
-> 内核复用开源，其余（数据层 / RAG / 编排 / 服务层 / 前端 / 部署）全部自研。
+> **一句话定位**：给定一个半导体行业选题，用工具检索公开财报与论文，按规划写出带引用的报告，
+> 并用可复现的评测集衡量「引用是否站得住、工具有没有乱调」。
+>
+> 基于 [smolagents](https://github.com/huggingface/smolagents)（Apache-2.0）内核二次开发；
+> **内核复用开源，自研部分 = 编排（研究/质检双角色）+ 检索与治理 + 可评测 Harness**。
+> 学术（arXiv）、医学（PubMed）、问答、MCP 等均为**扩展点**，不是主叙事。
 
-## 目标与可量化成果
+## 主链路（README 口径 = 代码实现）
 
-- 接入 ≥6 个真实公开数据源（SEC EDGAR 财报、arXiv 论文、PubMed 生物医药文献、行业新闻 RSS 等）
-- 报告所有数字带引用溯源，质检 Agent 交叉校验
-- 服务压测报告（QPS / P95 延迟 / 失败率）
+```
+采集适配器（SEC 财报 / arXiv / PubMed / 新闻 RSS）
+  → SQLite 文章库 → 分块 / 混合检索（BM25+向量+加权 RRF）/ bge-reranker / 实体共现图
+  → 研究 Agent（CodeAgent，工具：知识库 / SEC / arXiv / S2 / PubMed / 图谱 / 图表 / MCP）
+  → 质检 Agent（按「数字必须带出处」卡关，输出 JSON）
+  → 修订 ≤2 轮（失败只修订问题段落）→ 质检交付策略（caveat 横幅 / reject 拒交）
+  → 报告落盘 + 轨迹 JSONL + FastAPI/SSE 工作台
+```
+
+## 可验证的硬点（每一条都能指到代码/文档）
+
+1. **检索有实验依据**：加权 RRF（BM25 0.7 / 向量 0.3）来自 W2 实测（`docs/w2-spike-report.md`）；char-bigram 替代 jieba 是环境约束下的工程选择。
+2. **质检有产品策略**：`caveat` 打横幅、`reject` 拒交；质检是"可验证性门槛"而非真伪判定（`docs/w4-m2m3-report.md`）。
+3. **服务层不是空壳**：Cookie 鉴权、限流、中断会话恢复、任务重试、索引与生成互斥、Prometheus 指标（`tests/test_enterprise.py` 覆盖）。
+4. **评测有方法论反思**：真实语料 Recall@5=0.127 已归因到粗粒度标注；faithfulness 偏低归因到 judge 上下文（`docs/p3-eval-report.md`）。
+5. **MCP 是真接上的**：`github` / `fetch` 两个 stdio Server，网页端可增删管理。
 
 ## 技术栈
 
-| 层 | 选型 |
+| 层 | 选型（与代码一致） |
 |---|---|
-| Agent 内核 | smolagents 1.26.0（CodeAgent） |
-| LLM | DeepSeek `deepseek-chat`（OpenAI 兼容协议，可配备用模型） |
-| 服务层 | FastAPI + 任务队列 + SSE + Cookie 鉴权 + 限流 |
-| 知识层 | RAG：分块 + BM25/向量加权 RRF + bge-reranker（Chroma） |
+| Agent 内核 | smolagents 1.26.0（CodeAgent，仅复用内核） |
+| LLM | DeepSeek `deepseek-chat`（OpenAI 兼容；可配备用模型） |
+| 任务队列 | **ThreadPoolQueue**（默认；RQ+Redis 为预留扩展，未启用） |
+| 鉴权 | **共享 API Token → HttpOnly Cookie**（单用户；非多租户 JWT） |
+| 知识层 | 分块 + BM25/向量加权 RRF + bge-reranker（Chroma）+ **实体共现图**（词典匹配 + 共现边） |
+| 记忆 | **跨会话偏好记忆**（LLM 抽取 → SQLite + 向量召回） |
+| 服务层 | FastAPI + SSE + 限流 + 预算熔断 + 指标 |
 | 前端 | React + Vite + TS + Ant Design |
-| 部署 | Docker Compose（单机；RQ+Redis 规模化路径预留） |
+| 部署 | Docker Compose（单机） |
+
+## 数据源（实际接入的 6 个）
+
+SEC EDGAR 财报（32 篇全文）、arXiv 论文（49 篇）、PubMed 生物医药文献（32 篇）、新浪科技 / IT之家 / Google News RSS。
+> 说明：SEMI / SIA / 集微网等曾在计划中提及，实际未接入——以本清单为准。
 
 ## 报告类型
 
-| 类型 | 场景 |
-|---|---|
-| daily / weekly / deep | 行业研报（SEC 财报 + 行业新闻） |
-| survey | 学术调研（arXiv + PubMed 实时检索 + 参考文献列表） |
-| medical_survey | 医学综述（PubMed + PICO 框架 + 证据等级 + 免责声明） |
+| 类型 | 场景 | 定位 |
+|---|---|---|
+| daily / weekly / deep | 半导体行业研报（财报 + 新闻） | **主线** |
+| survey | 学术调研（arXiv + PubMed 实时检索） | 扩展点 |
+| medical_survey | 医学综述（PICO + 证据等级 + 免责声明） | 扩展点 |
 
-## 目录结构
+## 评测（Harness 路线）
 
-```
-semiconductor-agent/
-├── PLAN.md                # 8 周施工计划
-├── docs/                  # 日志 / 架构笔记 / 技术博客
-├── examples/              # 可运行 demo
-├── data/                  # 数据层（采集 → 清洗 → 入库）
-│   └── collectors/        #   数据源适配器
-├── agent/                 # Agent 编排层（研究/数据/质检）
-├── backend/               # FastAPI 服务层（W5）
-├── frontend/              # React 工作台（W6）
-├── tests/                 # 测试
-└── smolagents-src/        # 内核源码 clone（精读参考，不入库）
-```
+- 检索指标：Recall@k / MRR / Precision（`agent/eval.py`，CI 回归用 mini 语料）
+- LLM-judge：faithfulness / answer_relevance
+- 方法论反思：见 `docs/p3-eval-report.md`
+- **Agent 级评测（成功率 / 无引用数字率 / 步数 / 成本）**：规划中（`docs/企业认可改法.md` P1-1）
 
 ## 快速开始
 
@@ -55,43 +69,20 @@ semiconductor-agent/
 python -m venv .venv
 .venv\Scripts\pip install -r requirements.txt
 
-# 配置 .env（已 gitignore）：
-#   DEEPSEEK_API_KEY=sk-xxx
-#   DEEPSEEK_BASE_URL=https://api.deepseek.com
-#   DEEPSEEK_MODEL=deepseek-chat
+# 配置 .env（已 gitignore）：DEEPSEEK_API_KEY / API_TOKEN 等
 
-# 运行第一个 Agent
-.venv\Scripts\python examples\01_hello_agent.py
-
-# 启动完整产品（后端 API + 前端工作台，需先构建前端）
+# 启动完整产品（需先构建前端）
 cd frontend; npm install --registry=https://registry.npmmirror.com; npm run build; cd ..
 .venv\Scripts\python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8000
-# 浏览器打开 http://127.0.0.1:8000 （前端开发模式：frontend 下 npm run dev）
+# 浏览器打开 http://127.0.0.1:8000
 
-# 数据采集（3 个数据源，SQLite 去重入库）
+# 数据采集（SQLite 去重入库） / 定时
 .venv\Scripts\python scripts\collect.py --once
-# 每日定时采集（常驻）
 .venv\Scripts\python scripts\collect.py --schedule --hour 8
 ```
 
-> 注意：Google News RSS 在本机需走代理（见 `docs/day1-log.md`）；SEC EDGAR 请求必须带自定义 User-Agent。
+## 进度与对齐说明
 
-## 进度
-
-- [x] W1D1 环境搭建 + 第一个 Agent 跑通（`docs/day1-log.md`）
-- [x] W1D2-3 内核精读（`docs/architecture-notes.md`）
-- [x] W1D4 技术博客①（`docs/blog-01-smolagents-internals.md`）
-- [x] W1D5 项目骨架 + git init
-- [x] W1D6 数据源验证（SEC EDGAR + Google News RSS + IT之家）
-- [x] **博客①已发布**：[1800 行读懂一个 Agent 引擎：smolagents 内核剖析](https://juejin.cn/post/7673531977241247744)
-- [x] W2 技术预研（RAG 评测 `docs/w2-spike-report.md`、SSE 流式 `backend/app/main.py`、队列选型）
-- [x] **博客②已发布**：[RAG 检索链路实测：BM25 vs 向量 vs 混合](https://juejin.cn/post/7673810995882524672)
-- [x] W3 M1 数据管道：适配器接口 + 重试 + SQLite 去重入库 + 采集日志 + APScheduler 定时
-- [x] W4 M2 RAG 落地（长文档语料 + 分块 + 加权 RRF + reranker，评测见 `docs/w4-m2m3-report.md`）
-- [x] W4 M3 多 Agent 编排（研究/质检/修订循环，实测生成带引用周报）
-- [x] **博客③已发布**：[多 Agent 协作与质检链路](https://juejin.cn/post/7673807945507242018)
-- [x] W5 M4 研报模板 + M5 服务层（任务队列/会话/SSE/鉴权，冒烟实测）
-- [x] W6 M6 前端工作台（React+antd，浏览器 E2E 验证通过）
-- [ ] W7 生产化上线（Docker/HTTPS/压测）+ 博客④ → W8 面试打磨
-
-详细计划见 [PLAN.md](PLAN.md)。
+- 博客系列 6 篇已发布（掘金）；测试 43 个全绿；CI 三流水线（pytest + 前端构建 + Docker 构建）
+- `docs/企业认可改法.md`：第三方审阅整改建议（已修复：fallback 切换、记忆向量错位、JSON 解析；P0-1 口径统一见本 README）
+- `PLAN.md` 为原始施工图，架构以本 README 为准

@@ -266,6 +266,110 @@ def test_memory_extract_with_fake_client():
     assert facts == ["用户关注存内计算方向", "用户在做秋招项目"]
 
 
+def test_extract_json_handles_multiple_braces():
+    from agent.orchestrator import _extract_json
+
+    # 多组花括号 + 嵌套：应取第一个完整可解析的 JSON（旧贪心正则会把多个对象吸成一个而失败）
+    text = '结论如下 {"a": {"b": 1}} 以及 {"c": 2} 其他文字'
+    assert _extract_json(text) == {"a": {"b": 1}}
+    # 无效 JSON 应跳过继续找
+    assert _extract_json('{"x": } 垃圾 {"ok": 1}') == {"ok": 1}
+    assert _extract_json("无 JSON") is None
+    assert _extract_json(None) is None
+
+
+def test_fallback_switch_uses_new_agent(tmp_path, monkeypatch):
+    """回归：连接类错误触发备用模型后，重试必须用重建后的新 Agent（旧实现用旧实例）。"""
+    from agent import orchestrator as orch
+
+    calls: dict[str, list[str]] = {"researcher_runs": [], "qa_runs": []}
+
+    class FakeModel:
+        def __init__(self, tag):
+            self.tag = tag
+
+    class APIConnectionError(Exception):
+        pass
+
+    class FakeResearcher:
+        def __init__(self, model):
+            self.model = model
+
+        def run(self, task, reset=True):
+            calls["researcher_runs"].append(self.model.tag)
+            if len(calls["researcher_runs"]) == 1:
+                raise APIConnectionError("Connection error")
+            return "# 报告\n\n正文内容"
+
+    class FakeQA:
+        def __init__(self, model):
+            self.model = model
+
+        def run(self, task, reset=True):
+            calls["qa_runs"].append(self.model.tag)
+            return {"passed": True, "issues": []}
+
+    class FakeRetriever:
+        documents = {}
+
+        def search_hybrid(self, q, top_k=5):
+            return []
+
+    class FakeStore:
+        def query_articles(self, **kw):
+            return []
+
+    monkeypatch.setattr(orch, "build_model", lambda: FakeModel("primary"))
+    monkeypatch.setattr(orch, "build_fallback_model", lambda: FakeModel("fallback"))
+    monkeypatch.setattr(orch.settings, "TOKEN_BUDGET_CHARS", 1000000)
+    monkeypatch.setattr(orch.settings, "MEMORY_DB", tmp_path / "mem.db")
+    monkeypatch.setattr(orch.settings, "VECTOR_DIR", tmp_path / "vec")
+    monkeypatch.setattr(orch.settings, "REPORT_DIR", tmp_path / "reports")
+    monkeypatch.setattr(
+        orch.ReportPipeline,
+        "_build_agents",
+        lambda self, model, report_type="weekly": (FakeResearcher(model), FakeQA(model)),
+    )
+
+    pipe = orch.ReportPipeline(FakeRetriever(), FakeStore())
+    result = pipe.generate("测试选题")
+    # 第一次用主模型失败 → 切换后第二次必须用备用模型的新 Agent
+    assert calls["researcher_runs"] == ["primary", "fallback"]
+    assert result["model_used"] == "fallback"
+
+
+class _HashEmbedder:
+    """确定性假 Embedder（与 test_knowledge 同思路）。"""
+
+    def __init__(self, dim=32):
+        self.dim = dim
+
+    def embed(self, texts):
+        out = []
+        for t in texts:
+            vec = [0.0] * self.dim
+            for ch in t:
+                vec[ord(ch) % self.dim] += 1.0
+            norm = sum(x * x for x in vec) ** 0.5 or 1.0
+            out.append([x / norm for x in vec])
+        return out
+
+
+def test_memory_vector_search_maps_by_id(tmp_path):
+    """回归：向量召回必须按 rowid 映射记忆文本（旧实现把倒序列表下标当 doc_id 用）。"""
+    from agent.memory import MemoryStore
+
+    m = MemoryStore(tmp_path / "mem.db", embedder=_HashEmbedder(), vector_dir=tmp_path / "vec")
+    m.add("记忆A：用户关注 HBM")
+    m.add("记忆B：用户关注存内计算")
+    m.add("记忆C：用户关注先进封装")
+    # 删除中间一条 → rowid 不连续（1,3）；旧实现 DESC 列表为 [C,A]，doc_id=1 会被错当 index 1 → 返回 C
+    m._conn.execute("DELETE FROM memories WHERE content LIKE '%记忆B%'")
+
+    result = m.search("记忆A：用户关注 HBM", top_k=2)
+    assert result[0] == "记忆A：用户关注 HBM"  # 旧实现会返回"记忆C"
+
+
 # ---------- token 预算熔断 ----------
 
 class FakeModel:

@@ -1,4 +1,4 @@
-"""跨会话长期记忆（对标 Mem0）：抽取 → 存储 → 语义召回。
+"""跨会话偏好记忆（思路参考 Mem0，自研实现）：抽取 → 存储 → 语义召回。
 
 三步走：
 1. extract：对话结束后用 LLM 抽取"值得记住"的用户偏好/关注方向/重要事实
@@ -86,10 +86,12 @@ class MemoryStore:
     # ---- 召回 ----
     def search(self, query: str, top_k: int = 4, user_id: str = "default") -> list[str]:
         rows = self._conn.execute(
-            "SELECT content FROM memories WHERE user_id = ? ORDER BY id DESC LIMIT 200",
+            "SELECT id, content FROM memories WHERE user_id = ? ORDER BY id DESC LIMIT 200",
             (user_id,),
         ).fetchall()
-        all_texts = [r[0] for r in rows]
+        # id -> content 映射：Chroma 的 doc_id 是 rowid（正序），all_texts 是倒序，不能当下标用
+        id_to_text = {r[0]: r[1] for r in rows}
+        all_texts = [r[1] for r in rows]
         if not all_texts:
             return []
         if self._collection is not None:
@@ -98,7 +100,12 @@ class MemoryStore:
 
                 qv = self.embedder.embed([query])[0]
                 hits = self._collection.search(qv, top_k=min(top_k, len(all_texts)))
-                return [all_texts[int(h.doc_id)] for h in hits if h.doc_id.isdigit()]
+                out = []
+                for h in hits:
+                    if h.doc_id.isdigit() and int(h.doc_id) in id_to_text:
+                        out.append(id_to_text[int(h.doc_id)])
+                if out:
+                    return out
             except Exception:  # noqa: BLE001 —— 回退关键词
                 pass
         # 关键词召回（缺省/回退）：query 与记忆的字符重叠度 + 近因
