@@ -141,14 +141,25 @@ def _mcp_tool(name: str, entry: dict) -> Tool:
     props = (schema.get("properties") or {}) if isinstance(schema, dict) else {}
     # MCP inputSchema 类型 → smolagents 允许的类型（其余一律落为 string，避免构造失败）
     _ALLOWED = {"string", "integer", "number", "boolean", "array", "object", "null"}
+    # 枚举治理：把 enum/default 透传给模型（描述里标注），forward 里做归一化，
+    # 避免模型传枚举外值（如 Tavily search_depth='deep'）触发网关 400。
+    tool_enums: dict[str, list] = {}
+    tool_defaults: dict[str, Any] = {}
     tool_inputs: dict[str, dict] = {}
     for pname, p in props.items():
         ptype = p.get("type", "string")
         if not isinstance(ptype, str) or ptype not in _ALLOWED:
             ptype = "string"
+        desc = p.get("description", "")
+        if p.get("enum"):
+            tool_enums[pname] = list(p["enum"])
+            desc = (desc + " " if desc else "") + "可选值: " + "/".join(str(e) for e in tool_enums[pname])
+        if "default" in p:
+            tool_defaults[pname] = p["default"]
+            desc = (desc + " " if desc else "") + f"默认: {p['default']}"
         tool_inputs[pname] = {
             "type": ptype,
-            "description": p.get("description", ""),
+            "description": desc,
             "nullable": pname not in required,
         }
     server = entry.get("server", "mcp")
@@ -184,13 +195,23 @@ def _mcp_tool(name: str, entry: dict) -> Tool:
         def forward(self, **kwargs: Any) -> str:
             # 只取 schema 内声明的参数，避免模型传多余字段
             args = {k: v for k, v in kwargs.items() if k in props and v is not None}
+            # 枚举归一化：非法值 → default（或枚举首值），避免网关 400，并在结果前缀提示
+            fixed: list[str] = []
+            for pname, enum in tool_enums.items():
+                if pname in args and isinstance(args[pname], str) and args[pname] not in enum:
+                    repl = tool_defaults.get(pname, enum[0])
+                    fixed.append(f"{pname}='{args[pname]}' 不在枚举内，已归一化为 '{repl}'")
+                    args[pname] = repl
             try:
-                return _invoke(args)
+                result = _invoke(args)
             except Exception as e:  # noqa: BLE001
                 return (
                     f"MCP 工具 {tool_name} 调用失败：{type(e).__name__}: {e}。"
                     "可改用 search_knowledge / query_filings 获取已入库资料"
                 )
+            if fixed:
+                result = "（参数已归一化：" + "；".join(fixed) + "）\n" + result
+            return result
 
     cls_name = "MCPTool_" + re.sub(r"\W", "_", tool_name)
     MCPTool.__name__ = cls_name

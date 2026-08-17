@@ -370,6 +370,55 @@ def test_http_mcp_tool_forward_dispatches_http(monkeypatch):
     assert "调用失败" in out2 and "search_knowledge" in out2
 
 
+def test_http_mcp_tool_enum_normalization(monkeypatch):
+    """回归：枚举参数传非法值（如 Tavily search_depth='deep'）必须归一化而非网关 400。"""
+    from agent import mcp_client as mc
+
+    monkeypatch.setattr(
+        mc,
+        "_http_connect_and_list",
+        lambda url, headers: [
+            type("T", (), {
+                "name": "search_proxy_tavily_search",
+                "description": "d",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "query": {"type": "string"},
+                        "search_depth": {
+                            "type": "string",
+                            "enum": ["basic", "advanced", "fast", "ultra-fast"],
+                            "default": "basic",
+                        },
+                    },
+                },
+            })()
+        ],
+    )
+    calls = {}
+
+    def fake_http(url, headers, name, args, timeout=45.0):
+        calls["args"] = args
+        return '{"results": []}'
+
+    monkeypatch.setattr(mc, "_http_call_tool", fake_http)
+    tools = mc.build_mcp_http_tools("https://x/mcp", {"Authorization": "Bearer t"})
+    t = tools[0]
+
+    # schema 描述透传枚举与默认值（模型可见，防乱传）
+    assert "可选值" in t.inputs["search_depth"]["description"]
+    assert "basic" in t.inputs["search_depth"]["description"]
+
+    # 非法值 → 归一化为 default，且结果带提示；合法值原样透传
+    out = t(query="台积电", search_depth="deep")
+    assert calls["args"] == {"query": "台积电", "search_depth": "basic"}
+    assert "已归一化" in out
+
+    out2 = t(query="台积电", search_depth="advanced")
+    assert calls["args"]["search_depth"] == "advanced"
+    assert "已归一化" not in out2
+
+
 def test_orchestrator_merges_http_mcp_tools(monkeypatch):
     """settings 配置了 HTTP 网关时，_get_mcp_tools 合并 stdio + http 工具。"""
     from agent import orchestrator as orch
