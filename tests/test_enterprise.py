@@ -130,6 +130,24 @@ def test_qa_endpoint(tmp_path):
     assert client.post("/api/v1/qa", json={"question": "x?"}).status_code == 401
 
 
+def test_report_type_whitelist(tmp_path):
+    """研投 basic_research 可通过白名单；非法类型 422。"""
+    client = TestClient(make_app(tmp_path))
+    headers = {"X-API-Token": "test-token-1"}
+    ok = client.post(
+        "/api/v1/sessions",
+        json={"topic": "台积电基本面分析测试选题", "report_type": "basic_research"},
+        headers=headers,
+    )
+    assert ok.status_code == 200
+    bad = client.post(
+        "/api/v1/sessions",
+        json={"topic": "非法类型测试", "report_type": "not_a_type"},
+        headers=headers,
+    )
+    assert bad.status_code == 422
+
+
 def test_multi_turn_conversation(tmp_path):
     client = TestClient(make_app(tmp_path))
     headers = {"X-API-Token": "test-token-1"}

@@ -57,7 +57,8 @@ const PRESETS = [
   "半导体行业日报：聚焦台积电 2nm 产能与存储芯片价格走势",
   "NVIDIA、Intel、ASML、台积电四巨头最新财报对比周报",
   "存内计算（Processing-in-Memory）与 DRAM 芯片学术研究现状",
-  "生成式 AI 与大模型 Agent 对先进芯片制造需求的深度研报"
+  "生成式 AI 与大模型 Agent 对先进芯片制造需求的深度研报",
+  "台积电 2026 年 7 月营收基本面分析（仅研究参考，不构成投资建议）"
 ];
 
 export default function NewTask({ onCreate }: { onCreate: (id: number) => void }) {
