@@ -1,0 +1,77 @@
+{
+  "summary": {
+    "n": 3,
+    "n_done": 3,
+    "n_error": 0,
+    "success_rate": 1.0,
+    "avg_uncited_rate": 0.668,
+    "avg_steps": 70.7,
+    "avg_tool_calls": 52.3,
+    "avg_errors": 22.0,
+    "avg_duration_s": 207.4,
+    "avg_budget_chars": 1084152,
+    "required_tools_missing_all": [
+      "t01",
+      "t02",
+      "t03"
+    ]
+  },
+  "results": [
+    {
+      "id": "t01",
+      "status": "done",
+      "success": true,
+      "verdict_passed": true,
+      "uncited_rate": 0.623,
+      "numbers_total": 162,
+      "numbers_without_url": 101,
+      "steps": 73,
+      "tool_calls": 58,
+      "errors": 14,
+      "budget_chars": 1154215,
+      "duration_s": 272.6,
+      "revision_rounds": 2,
+      "required_tools_missing": [
+        "query_filings",
+        "search_knowledge"
+      ]
+    },
+    {
+      "id": "t02",
+      "status": "done",
+      "success": true,
+      "verdict_passed": true,
+      "uncited_rate": 0.702,
+      "numbers_total": 141,
+      "numbers_without_url": 99,
+      "steps": 54,
+      "tool_calls": 32,
+      "errors": 33,
+      "budget_chars": 656633,
+      "duration_s": 77.2,
+      "revision_rounds": 2,
+      "required_tools_missing": [
+        "query_filings",
+        "search_knowledge"
+      ]
+    },
+    {
+      "id": "t03",
+      "status": "done",
+      "success": true,
+      "verdict_passed": true,
+      "uncited_rate": 0.678,
+      "numbers_total": 363,
+      "numbers_without_url": 246,
+      "steps": 85,
+      "tool_calls": 67,
+      "errors": 19,
+      "budget_chars": 1441609,
+      "duration_s": 272.4,
+      "revision_rounds": 2,
+      "required_tools_missing": [
+        "query_filings"
+      ]
+    }
+  ]
+}

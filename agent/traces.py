@@ -62,11 +62,30 @@ def serialize_step(step) -> dict:
 
 
 def collect_agent_steps(agent) -> list[dict]:
-    """读取 agent.memory.steps 序列化；无 memory 的对象返回空。"""
+    """读取 agent.memory.steps 序列化；无 memory 的对象返回空。
+
+    CodeAgent 的 ToolCall 记录为 python_interpreter，真实工具调用出现在
+    model_output 的代码里——这里用 agent.tools 的工具名扫描 `name(` 模式，
+    把实际调用的工具补进 step.tools，保证轨迹里工具可见。
+    """
     memory = getattr(agent, "memory", None)
     if memory is None:
         return []
-    return [serialize_step(s) for s in getattr(memory, "steps", None) or []]
+    tool_names = list(getattr(agent, "tools", {}) or {}.keys())
+    steps = []
+    for s in getattr(memory, "steps", None) or []:
+        d = serialize_step(s)
+        mo = d.get("model_output", "")
+        if isinstance(mo, str) and tool_names:
+            detected = [
+                {"name": n, "arguments": ""}
+                for n in tool_names
+                if re.search(rf"\b{re.escape(n)}\s*\(", mo)
+            ]
+            if detected:
+                d["tools"] = d.get("tools", []) + detected
+        steps.append(d)
+    return steps
 
 
 def analyze_numbers(md: str) -> dict:

@@ -409,6 +409,36 @@ def test_memory_vector_search_maps_by_id(tmp_path):
     assert result[0] == "记忆A：用户关注 HBM"  # 旧实现会返回"记忆C"
 
 
+def test_collect_agent_steps_detects_tools_from_code():
+    """CodeAgent 的真实工具调用在代码里——collect_agent_steps 应把它们补进轨迹。"""
+    from agent.traces import collect_agent_steps
+
+    class FakeStep:
+        def __init__(self, code):
+            self.step_number = 1
+            self.model_output = type("M", (), {"content": code})()
+            self.tool_calls = []
+            self.action_output = None
+            self.error = None
+            self.timing = type("T", (), {"start_time": 1.0, "end_time": 2.0})()
+            self.token_usage = None
+
+    class FakeMemory:
+        steps = [
+            FakeStep("result = search_knowledge(keywords='台积电', limit=3)\nprint(result)"),
+            FakeStep("rows = query_filings(company='NVIDIA')"),
+        ]
+
+    class FakeAgent:
+        tools = {"search_knowledge": object(), "query_filings": object(), "final_answer": object()}
+        memory = FakeMemory()
+
+    steps = collect_agent_steps(FakeAgent())
+    seen = {t["name"] for s in steps for t in s.get("tools", [])}
+    assert "search_knowledge" in seen
+    assert "query_filings" in seen
+
+
 # ---------- token 预算熔断 ----------
 
 class FakeModel:

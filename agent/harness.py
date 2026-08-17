@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -35,7 +36,14 @@ def evaluate_one(pipeline, task: dict) -> dict:
     meta = trace.get("meta", {})
     steps = trace.get("steps", [])
 
+    # CodeAgent 的工具调用记录为 python_interpreter，真实工具名出现在 model_output 代码里
     tools_used = {t["name"] for s in steps for t in s.get("tools", [])}
+    for s in steps:
+        mo = s.get("model_output", "")
+        if isinstance(mo, str):
+            for t in task.get("required_tools", []):
+                if re.search(rf"\b{re.escape(t)}\s*\(", mo):
+                    tools_used.add(t)
     required_missing = sorted(set(task.get("required_tools", [])) - tools_used)
     numbers = meta.get("numbers", {})
     uncited_rate = numbers.get("uncited_rate", 1.0)
