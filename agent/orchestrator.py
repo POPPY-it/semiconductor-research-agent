@@ -44,6 +44,9 @@ QA_INSTRUCTIONS = (
     "你是事实质检员。校验给定报告的每个数字与论断是否能被检索结果支持。\n"
     "要求：问题必须注明所属小节（如『第2节 数据透视：…』）；"
     "无来源的精确数字必须列进 issues。\n"
+    "检索纪律：优先用 search_knowledge / query_filings 核对；"
+    "实时搜索工具（search_proxy_serper_news / search_proxy_tavily_search 等）**最多调用 2 次**，"
+    "仅当报告里的实时新闻类论断无法用知识库核对时才使用，禁止逐条数字重搜。\n"
     "最终必须调用 final_answer 并直接传入 dict（不要输出任何文字说明），例如：\n"
     "final_answer({\"passed\": true, \"issues\": [\"问题1\",\"问题2\"]})"
 )
@@ -219,12 +222,15 @@ class ReportPipeline:
         extra = (
             f"4) 按「{template['sections']}」分节；"
             f"5) 正文不少于 {template['min_words']} 字；"
-            f"6) 若报告含可量化对比数据（营收/增速/市场份额等），调用 generate_chart 生成图表嵌入对应小节。"
+            f"6) 若报告含可量化对比数据（营收/增速/市场份额等），调用 generate_chart 生成图表嵌入对应小节；"
+            f"7) 检索纪律：优先用知识库（search_knowledge / query_filings）取材；"
+            f"实时搜索工具（search_proxy_serper_news / search_proxy_tavily_search 等）每节最多 1 次，"
+            f"仅用于补充知识库没有的最新动态，禁止逐条数字反复搜索。"
         )
         if template.get("cite_format"):
-            extra += f"7) {template['cite_format']}。"
+            extra += f"8) {template['cite_format']}。"
         if template.get("safety"):
-            extra += f"8) {template['safety']}"
+            extra += f"9) {template['safety']}"
         mcp_tools = self._get_mcp_tools()
         base_tools = [search_knowledge, query_filings, search_arxiv, search_semantic_scholar, search_graph, search_pubmed]
         base_tools += mcp_tools
@@ -237,7 +243,7 @@ class ReportPipeline:
         qa = CodeAgent(
             tools=base_tools,
             model=model,
-            max_steps=8,
+            max_steps=6,
             instructions=QA_INSTRUCTIONS,
         )
         return researcher, qa

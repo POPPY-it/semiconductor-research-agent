@@ -153,6 +153,10 @@ def _mcp_tool(name: str, entry: dict) -> Tool:
         }
     server = entry.get("server", "mcp")
     transport = entry.get("transport", "stdio")
+    # 工具输出治理：实时搜索（HTTP 网关）返回全文很长，会快速烧光 token 预算——
+    # 统一截断到 MAX_OUTPUT_CHARS，并在尾部标注截断信息（面试口径：工具输出也是治理对象）。
+    max_out = int(entry.get("max_output_chars", 2500))
+
     # 注意：类体里不能 `name = name`（类体不查外层函数作用域），故用 tool_* 别名
     tool_name = name
     tool_desc = (
@@ -162,8 +166,12 @@ def _mcp_tool(name: str, entry: dict) -> Tool:
 
     def _invoke(args: dict) -> str:
         if transport == "http":
-            return _http_call_tool(entry["url"], entry.get("headers"), tool_name, args)
-        return _call_tool(entry["spec"], tool_name, args)
+            result = _http_call_tool(entry["url"], entry.get("headers"), tool_name, args)
+        else:
+            result = _call_tool(entry["spec"], tool_name, args)
+        if len(result) > max_out:
+            return result[:max_out] + f"\n…[已截断：原始 {len(result)} 字符，仅保留前 {max_out}]"
+        return result
 
     class MCPTool(Tool):
         name = tool_name
