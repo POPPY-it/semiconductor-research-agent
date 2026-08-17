@@ -1,0 +1,162 @@
+[
+  {
+    "id": "t01",
+    "topic": "台积电最近一期月度营收报告：金额与同比增速",
+    "report_type": "weekly",
+    "required_tools": ["query_filings", "search_knowledge"],
+    "checkpoints": ["报告给出台积电最近月度营收的精确金额", "报告给出同比增速并带来源链接", "金额/百分比必须可回溯到 SEC 披露"],
+    "facts": ["2026年7月合并营收约4,675.8亿新台币", "同比约+44.7%", "环比约+5.6%"]
+  },
+  {
+    "id": "t02",
+    "topic": "ASML 2026 年第二季度业绩与全年指引",
+    "report_type": "weekly",
+    "required_tools": ["query_filings", "search_knowledge"],
+    "checkpoints": ["给出 Q2 总净销售额与净收入", "给出全年指引区间与毛利率指引", "引用 SEC 6-K 链接"],
+    "facts": ["Q2 总净销售额约93亿欧元", "净收入约29亿欧元", "全年指引430-450亿欧元", "毛利率指引54%-56%"]
+  },
+  {
+    "id": "t03",
+    "topic": "NVIDIA 最近向 SEC 提交了哪些财报文件",
+    "report_type": "weekly",
+    "required_tools": ["query_filings"],
+    "checkpoints": ["列出 NVIDIA 最近的 10-Q 与 8-K 及日期", "文件引用 SEC 链接"],
+    "facts": ["2026年4月26日提交10-Q", "2026年5月20日发布业绩8-K", "2026年6月24日股东大会8-K"]
+  },
+  {
+    "id": "t04",
+    "topic": "Intel 最近的季度业绩披露记录",
+    "report_type": "weekly",
+    "required_tools": ["query_filings"],
+    "checkpoints": ["列出 Intel 最近的 10-Q 与业绩 8-K 及日期", "文件引用 SEC 链接"],
+    "facts": ["2026年6月27日提交Q2 10-Q", "2026年7月23日发布Q2业绩8-K", "2026年4月23日Q1业绩8-K"]
+  },
+  {
+    "id": "t05",
+    "topic": "台积电 2026 年 6 月营收数据",
+    "report_type": "daily",
+    "required_tools": ["query_filings", "search_knowledge"],
+    "checkpoints": ["给出 6 月营收金额与同比增速", "带 SEC 来源链接"],
+    "facts": ["2026年6月合并营收约4,426.8亿新台币", "同比约+67.9%"]
+  },
+  {
+    "id": "t06",
+    "topic": "ASML 2026 年第一季度业绩与当时的全年指引",
+    "report_type": "daily",
+    "required_tools": ["query_filings"],
+    "checkpoints": ["给出 Q1 净销售额与净收入", "给出 Q1 后全年指引区间", "引用 SEC 6-K"],
+    "facts": ["Q1 总净销售额约88亿欧元", "净收入约28亿欧元", "当时指引360-400亿欧元", "毛利率指引51%-53%"]
+  },
+  {
+    "id": "t07",
+    "topic": "台积电与 ASML 2026 年上半年季度业绩对比",
+    "report_type": "deep",
+    "required_tools": ["query_filings", "search_knowledge", "generate_chart"],
+    "checkpoints": ["两张表或图对比两家公司季度营收", "所有数字带来源", "图表用 generate_chart 生成"],
+    "facts": ["ASML Q1 88亿欧元 / Q2 93亿欧元", "台积电6月4,426.8亿 / 7月4,675.8亿新台币"]
+  },
+  {
+    "id": "t08",
+    "topic": "台积电 2026 年 1-7 月累计营收",
+    "report_type": "daily",
+    "required_tools": ["query_filings"],
+    "checkpoints": ["给出累计营收金额与累计同比", "带 SEC 链接"],
+    "facts": ["1-7月累计约28,720.6亿新台币", "累计同比约+37.0%"]
+  },
+  {
+    "id": "t09",
+    "topic": "最近关于先进封装 CoWoS 或 3D 封装的行业动态",
+    "report_type": "weekly",
+    "required_tools": ["search_knowledge"],
+    "checkpoints": ["给出至少 2 条相关新闻及来源链接", "不编造具体产能数字"],
+    "facts": ["存在台积电 CoWoS 产能与 AMD 相关的报道"]
+  },
+  {
+    "id": "t10",
+    "topic": "国内车规级 AI 芯片的量产动态",
+    "report_type": "daily",
+    "required_tools": ["search_knowledge"],
+    "checkpoints": ["给出具体公司与芯片名称", "新闻引用来源链接"],
+    "facts": ["芯擎科技『天工100』车规级7纳米AI芯片量产"]
+  },
+  {
+    "id": "t11",
+    "topic": "存储芯片（HBM/DRAM）价格或产能相关动态",
+    "report_type": "weekly",
+    "required_tools": ["search_knowledge", "search_graph"],
+    "checkpoints": ["给出 HBM/DRAM 相关实体关联", "新闻带来源"],
+    "facts": ["HBM 与 GPU、台积电、先进封装存在共现关系"]
+  },
+  {
+    "id": "t12",
+    "topic": "半导体设备与光刻机相关新闻",
+    "report_type": "daily",
+    "required_tools": ["search_knowledge"],
+    "checkpoints": ["至少 1 条设备/光刻相关新闻并带链接"],
+    "facts": ["存在 EUV/ASML 设备相关报道"]
+  },
+  {
+    "id": "t13",
+    "topic": "存内计算（Processing-in-Memory）领域的研究现状",
+    "report_type": "survey",
+    "required_tools": ["search_arxiv", "search_knowledge"],
+    "checkpoints": ["引用至少 2 篇相关论文", "给出研究方法分类", "参考文献列表格式规范"],
+    "facts": ["存在 PIM/DRAM 相关 arXiv 论文"]
+  },
+  {
+    "id": "t14",
+    "topic": "LLM Agent 在硬件设计自动化中的研究进展",
+    "report_type": "survey",
+    "required_tools": ["search_arxiv", "search_semantic_scholar"],
+    "checkpoints": ["引用具体论文并给出链接", "区分代表工作", "标注引文或 arXiv 链接"],
+    "facts": ["存在 SynAct 等芯片综合优化相关工作"]
+  },
+  {
+    "id": "t15",
+    "topic": "RAG 检索增强生成的技术路线调研",
+    "report_type": "survey",
+    "required_tools": ["search_arxiv", "search_knowledge"],
+    "checkpoints": ["覆盖 RAG 与 LLM/Agent 的关联", "论文带链接"],
+    "facts": ["RAG 与 LLM、Agent 在语料中共现"]
+  },
+  {
+    "id": "t16",
+    "topic": "芯片布局优化（placement）AI 方法的论文调研",
+    "report_type": "survey",
+    "required_tools": ["search_arxiv"],
+    "checkpoints": ["找到至少 1 篇芯片布局相关论文", "带 arXiv 链接"],
+    "facts": ["存在 AI-based chip placement 相关工作"]
+  },
+  {
+    "id": "t17",
+    "topic": "HBM 与哪些公司和技术相关：知识图谱视角",
+    "report_type": "daily",
+    "required_tools": ["search_graph", "search_knowledge"],
+    "checkpoints": ["用 search_graph 列出 HBM 关联实体", "给出关联强度", "说明来自实体共现图"],
+    "facts": ["HBM 关联 GPU、台积电、先进封装、三星等"]
+  },
+  {
+    "id": "t18",
+    "topic": "台积电在语料中的技术关联网络",
+    "report_type": "daily",
+    "required_tools": ["search_graph"],
+    "checkpoints": ["列出台积电关联实体（至少5个）", "说明共现强度"],
+    "facts": ["台积电关联 2nm、HBM、苹果、先进封装、晶圆代工等"]
+  },
+  {
+    "id": "t19",
+    "topic": "AI 算力需求对半导体产业的影响综合周报",
+    "report_type": "weekly",
+    "required_tools": ["search_knowledge", "search_arxiv", "generate_chart"],
+    "checkpoints": ["综合新闻与论文两类来源", "关键数字带来源", "至少一张图表"],
+    "facts": ["AI 算力与 GPU、HBM、先进封装存在关联"]
+  },
+  {
+    "id": "t20",
+    "topic": "半导体产业链上下游核心实体综述",
+    "report_type": "deep",
+    "required_tools": ["search_graph", "search_knowledge", "query_filings"],
+    "checkpoints": ["用图谱梳理产业链实体", "财报数据带 SEC 链接", "无来源的精确数字应避免"],
+    "facts": ["台积电、ASML、NVIDIA、Intel 均出现在语料中"]
+  }
+]
