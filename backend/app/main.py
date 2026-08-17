@@ -220,10 +220,12 @@ def create_app(
     # ---- MCP 工具生态（显性化）----
 
     def _get_mcp_catalog(app):
-        """懒构建并缓存 MCP 工具目录：tool_name -> {server, spec, description}。
+        """懒构建并缓存 MCP 工具目录：tool_name -> {server, spec|url/headers, description}。
 
-        来源为数据库 mcp_servers 注册表（网页端可增删）。
-        注意：MCP Server 以 stdio 子进程运行，等于执行注册的 command——自托管场景安全，
+        两类来源：
+        1. 数据库 mcp_servers 注册表（stdio 子进程，网页端可增删）；
+        2. HTTP MCP 端点（可选搜索网关，settings.MCP_HTTP_URL/TOKEN/TOOLS，token 不进 git）。
+        注意：stdio Server 以子进程运行，等于执行注册的 command——自托管场景安全，
         多租户公开部署必须加沙箱/白名单（安全边界见 docs）。
         """
         if not hasattr(app.state, "mcp_catalog"):
@@ -244,10 +246,30 @@ def create_app(
                         catalog[tname] = {
                             "server": rec["name"],
                             "spec": spec,
+                            "transport": "stdio",
                             "description": entry.get("description", ""),
                         }
                 except Exception as e:  # noqa: BLE001
                     catalog[f"__error_{rec['name']}"] = {"server": rec["name"], "error": str(e)[:120]}
+            # HTTP 搜索网关（如 Serper/Tavily/Exa 聚合端点）
+            if settings.MCP_HTTP_URL and settings.MCP_HTTP_TOKEN:
+                from agent.mcp_client import discover_http
+
+                allow = [t.strip() for t in settings.MCP_HTTP_TOOLS.split(",") if t.strip()]
+                http_cat = discover_http(
+                    settings.MCP_HTTP_URL,
+                    {"Authorization": f"Bearer {settings.MCP_HTTP_TOKEN}"},
+                )
+                for tname, entry in http_cat.items():
+                    if allow and not any(tname.endswith("_" + a) or tname == a for a in allow):
+                        continue
+                    catalog[tname] = {
+                        "server": "search-gateway",
+                        "url": settings.MCP_HTTP_URL,
+                        "headers": {"Authorization": f"Bearer {settings.MCP_HTTP_TOKEN}"},
+                        "transport": "http",
+                        "description": entry.get("description", ""),
+                    }
             app.state.mcp_catalog = catalog
         return app.state.mcp_catalog
 
@@ -274,14 +296,19 @@ def create_app(
 
     @app.post("/api/v1/mcp/call", dependencies=[Depends(require_auth)])
     async def mcp_call_tool(req: dict = Body(...)):
-        from agent.mcp_client import _call_tool
+        from agent.mcp_client import _call_tool, _http_call_tool
 
         catalog = await asyncio.to_thread(_get_mcp_catalog, app)
         entry = catalog.get(req.get("tool_name", ""))
-        if not entry or "spec" not in entry:
+        if not entry:
             raise HTTPException(status_code=404, detail="MCP 工具未找到")
         args = req.get("arguments") or {}
-        result = await asyncio.to_thread(_call_tool, entry["spec"], req["tool_name"], args)
+        if entry.get("transport") == "http":
+            result = await asyncio.to_thread(
+                _http_call_tool, entry["url"], entry.get("headers"), req["tool_name"], args
+            )
+        else:
+            result = await asyncio.to_thread(_call_tool, entry["spec"], req["tool_name"], args)
         return {"tool_name": req["tool_name"], "result": result}
 
     @app.post("/api/v1/mcp/servers", dependencies=[Depends(require_auth)])
