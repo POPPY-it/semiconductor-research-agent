@@ -23,6 +23,7 @@ data/vectorstore/
 data/models/
 reports/output/
 reports/charts/
+agent/traces/
 *.log
 
 # --- 源码参考（本地精读用，不作为本仓库代码提交） ---

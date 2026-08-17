@@ -19,6 +19,7 @@ class Settings:
     REPORT_DIR: Path = ROOT / "reports" / "output"
     CHART_DIR: Path = ROOT / "reports" / "charts"
     MEMORY_DB: Path = ROOT / "data" / "memory.db"
+    TRACE_DIR: Path = ROOT / "agent" / "traces"
     APP_QUEUE: str = os.getenv("APP_QUEUE", "thread")  # thread | rq
     REDIS_URL: str = os.getenv("REDIS_URL", "redis://127.0.0.1:6379/0")
 

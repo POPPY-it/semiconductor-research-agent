@@ -278,6 +278,36 @@ def test_extract_json_handles_multiple_braces():
     assert _extract_json(None) is None
 
 
+def test_analyze_numbers_with_citations():
+    from agent.traces import analyze_numbers
+
+    md = (
+        "台积电营收 4675.8 亿元 [来源](https://www.sec.gov/x)\n"
+        "同比增长 44.7%。另有未标注数字 12 亿美元。"
+    )
+    r = analyze_numbers(md)
+    assert r["total_numbers"] == 3
+    assert r["numbers_without_url"] == 2  # 44.7% 与 12 亿美元无链接
+    assert r["uncited_rate"] > 0
+
+
+def test_save_trace_roundtrip(tmp_path):
+    from agent.traces import new_run_id, save_trace
+
+    rid = new_run_id()
+    path = save_trace(
+        tmp_path, rid, "report", "测试选题",
+        [{"kind": "ActionStep", "role": "researcher", "tools": [{"name": "search_knowledge"}]}],
+        {"verdict": {"passed": True}, "duration_s": 1.2},
+    )
+    import json
+
+    record = json.loads(path.read_text(encoding="utf-8"))
+    assert record["run_id"] == rid
+    assert record["steps"][0]["role"] == "researcher"
+    assert record["meta"]["verdict"]["passed"] is True
+
+
 def test_fallback_switch_uses_new_agent(tmp_path, monkeypatch):
     """回归：连接类错误触发备用模型后，重试必须用重建后的新 Agent（旧实现用旧实例）。"""
     from agent import orchestrator as orch
@@ -325,6 +355,7 @@ def test_fallback_switch_uses_new_agent(tmp_path, monkeypatch):
     monkeypatch.setattr(orch.settings, "MEMORY_DB", tmp_path / "mem.db")
     monkeypatch.setattr(orch.settings, "VECTOR_DIR", tmp_path / "vec")
     monkeypatch.setattr(orch.settings, "REPORT_DIR", tmp_path / "reports")
+    monkeypatch.setattr(orch.settings, "TRACE_DIR", tmp_path / "traces")
     monkeypatch.setattr(
         orch.ReportPipeline,
         "_build_agents",
@@ -336,6 +367,14 @@ def test_fallback_switch_uses_new_agent(tmp_path, monkeypatch):
     # 第一次用主模型失败 → 切换后第二次必须用备用模型的新 Agent
     assert calls["researcher_runs"] == ["primary", "fallback"]
     assert result["model_used"] == "fallback"
+    # 轨迹已落盘（P0-2）
+    trace_files = list((tmp_path / "traces").glob("*.jsonl"))
+    assert len(trace_files) == 1
+    import json
+
+    record = json.loads(trace_files[0].read_text(encoding="utf-8"))
+    assert record["kind"] == "report"
+    assert record["meta"]["model_used"] == "fallback"
 
 
 class _HashEmbedder:

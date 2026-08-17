@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import re
 import sys
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -23,6 +24,12 @@ from agent.llm import (  # noqa: E402
     build_fallback_model,
     build_model,
     is_connection_error,
+)
+from agent.traces import (  # noqa: E402
+    analyze_numbers,
+    collect_agent_steps,
+    new_run_id,
+    save_trace,
 )
 from backend.app.core import settings  # noqa: E402
 from smolagents import CodeAgent, tool  # noqa: E402
@@ -408,6 +415,9 @@ class ReportPipeline:
     def generate(
         self, topic: str, output_dir: str | Path | None = None, report_type: str = "weekly"
     ) -> dict:
+        run_id = new_run_id()
+        t0 = time.time()
+        all_steps: list[dict] = []
         primary = BudgetedModel(build_model(), budget_chars=settings.TOKEN_BUDGET_CHARS)
         fallback_base = build_fallback_model()
         researcher, qa = self._build_agents(primary, report_type)
@@ -422,6 +432,16 @@ class ReportPipeline:
         def current_agent(role: str):
             return researcher if role == "researcher" else qa
 
+        def run_and_trace(role: str, agent, task, reset: bool = True):
+            """执行一次并把该 Agent 的 memory.steps 落进轨迹（含失败前的部分步骤）。"""
+            try:
+                result = agent.run(task, reset=reset)
+            finally:
+                for s in collect_agent_steps(agent):
+                    s["role"] = role
+                    all_steps.append(s)
+            return result
+
         def guarded_run(role: str, task, reset: bool = True):
             """按角色实时取当前 Agent 执行；连接类错误触发一次备用模型切换后重试。
 
@@ -429,7 +449,7 @@ class ReportPipeline:
             （修复：旧实现用参数 agent，切换后仍跑旧模型）。
             """
             try:
-                return current_agent(role).run(task, reset=reset)
+                return run_and_trace(role, current_agent(role), task, reset=reset)
             except Exception as e:  # noqa: BLE001
                 budget_err = _extract_budget_error(e)
                 if budget_err is not None:
@@ -440,7 +460,7 @@ class ReportPipeline:
                     and is_connection_error(e)
                 ):
                     switch_to_fallback()  # 重建 researcher/qa（备用模型）
-                    return current_agent(role).run(task, reset=reset)  # 用新实例重试
+                    return run_and_trace(role, current_agent(role), task, reset=reset)  # 用新实例重试
                 raise
 
         mem_ctx = ""
@@ -469,8 +489,9 @@ class ReportPipeline:
                 break
             draft = guarded_run(
                 "researcher",
-                f"质检反馈的问题：{json.dumps(verdict.get('issues', []), ensure_ascii=False)}"
-                "。请修订报告并重新输出完整 Markdown 报告。",
+                f"质检反馈的问题：{json.dumps(verdict.get('issues', []), ensure_ascii=False)}。"
+                "请**只修订与上述问题直接相关的段落**（修正数字、补充来源链接、删除无法验证的论断），"
+                "其余内容保持原样；最后输出修订后的完整 Markdown 报告。",
                 reset=False,
             )
 
@@ -485,6 +506,25 @@ class ReportPipeline:
             draft = draft.rstrip() + "\n\n---\n\n> **免责声明**：" + template["disclaimer"] + "\n"
         out_path.write_text(draft, encoding="utf-8")
 
+        # 轨迹落盘：步骤 + 质检 + 预算 + 耗时 + 数字引用分析
+        trace_path = save_trace(
+            settings.TRACE_DIR,
+            run_id,
+            "report",
+            topic,
+            all_steps,
+            meta={
+                "report_type": report_type,
+                "verdict": verdict,
+                "revision_rounds": rounds,
+                "model_used": "fallback" if used_fallback[0] else "primary",
+                "budget_used_chars": primary.used_chars,
+                "duration_s": round(time.time() - t0, 2),
+                "numbers": analyze_numbers(draft),
+                "report_path": str(out_path),
+            },
+        )
+
         return {
             "report_path": str(out_path),
             "report": draft,
@@ -492,6 +532,7 @@ class ReportPipeline:
             "revision_rounds": rounds,
             "model_used": ("fallback" if used_fallback[0] else "primary"),
             "budget_used_chars": primary.used_chars,
+            "trace_path": str(trace_path),
         }
 
     def answer_question(self, question: str, history: list[dict] | None = None) -> dict:
@@ -543,8 +584,13 @@ class ReportPipeline:
         except Exception:  # noqa: BLE001
             pass
         task = context + f"当前问题：{question}"
+        run_id = new_run_id()
+        t0 = time.time()
         answer = str(qa_agent.run(task))
         self._extract_and_store_memories(question, answer)
+        steps = collect_agent_steps(qa_agent)
+        for s in steps:
+            s["role"] = "qa"
 
         # RAG 检索过程显性化：返回命中的分块、相关度、来源类型（供前端"检索过程"面板展示）
         hits = self.retriever.search_hybrid(question, top_k=5)
@@ -566,6 +612,18 @@ class ReportPipeline:
                     "snippet": doc.text[:220],
                 }
             )
+        trace_path = save_trace(
+            settings.TRACE_DIR,
+            run_id,
+            "qa",
+            question,
+            steps,
+            meta={
+                "budget_used_chars": model.used_chars,
+                "duration_s": round(time.time() - t0, 2),
+                "numbers": analyze_numbers(answer),
+            },
+        )
         return {
             "question": question,
             "answer": answer,
@@ -575,4 +633,5 @@ class ReportPipeline:
                 "top_k": 5,
                 "corpus_size": len(self.retriever.documents),
             },
+            "trace_path": str(trace_path),
         }
