@@ -10,6 +10,8 @@ import {
   Input,
   List,
   message,
+  Modal,
+  Select,
   Space,
   Spin,
   Tag,
@@ -63,15 +65,22 @@ export default function QaPanel() {
   const [memories, setMemories] = useState<string[]>([]);
   const [retrieval, setRetrieval] = useState<{ method: string; top_k: number; corpus_size: number } | null>(null);
   const [mcpServers, setMcpServers] = useState<{ name: string; tools: string[] }[]>([]);
+  const [mcpTools, setMcpTools] = useState<{ server: string; tool: string; description: string; inputSchema: Record<string, { type?: string; description?: string }> }[]>([]);
   const [mcpTesting, setMcpTesting] = useState(false);
   const [mcpName, setMcpName] = useState("");
   const [mcpCommand, setMcpCommand] = useState("");
   const [mcpArgs, setMcpArgs] = useState("");
+  const [testOpen, setTestOpen] = useState(false);
+  const [testServer, setTestServer] = useState("");
+  const [testTool, setTestTool] = useState("");
+  const [testArgsText, setTestArgsText] = useState("");
   const listRef = useRef<HTMLDivElement>(null);
 
   const refreshMcp = async () => {
     try {
-      setMcpServers((await mcpStatus()).servers);
+      const st = await mcpStatus();
+      setMcpServers(st.servers);
+      setMcpTools(st.tools);
     } catch {
       /* 忽略 */
     }
@@ -103,15 +112,49 @@ export default function QaPanel() {
     }
   };
 
-  const testMcp = async () => {
+  // 打开某个 Server 的测试弹窗：默认选第一个工具，按 schema 预填示例参数
+  const openMcpTest = (server: string) => {
+    const tools = mcpTools.filter((t) => t.server === server);
+    const first = tools[0];
+    setTestServer(server);
+    setTestTool(first?.tool || "");
+    if (first) {
+      const props = first.inputSchema || {};
+      const sample: Record<string, string> = {};
+      for (const [k, v] of Object.entries(props)) {
+        if (v?.type === "string" && Object.keys(sample).length < 2) {
+          sample[k] = k === "q" || k === "query" ? "台积电 2nm 产能" : "示例值";
+        }
+      }
+      setTestArgsText(JSON.stringify(sample, null, 2));
+    } else {
+      setTestArgsText("{}");
+    }
+    setTestOpen(true);
+  };
+
+  const runMcpTest = async () => {
+    if (!testTool) return;
+    let args: object;
+    try {
+      args = JSON.parse(testArgsText || "{}");
+    } catch {
+      message.error("参数必须是合法 JSON");
+      return;
+    }
     setMcpTesting(true);
     try {
-      const r = await mcpCall("search_github_repos", { query: "LLM agent framework", limit: 3 });
-      message.success("MCP 工具调用成功，结果已输出到控制台（见下方）");
+      const r = await mcpCall(testTool, args);
+      message.success("MCP 工具调用成功");
       setMessages((prev) => [
         ...prev,
-        { role: "assistant", content: "**MCP 工具实测** `search_github_repos`：\n\n" + r.result, sources: [] },
+        {
+          role: "assistant",
+          content: `**MCP 工具实测** \`${testTool}\`（${testServer}）：\n\n` + r.result.slice(0, 4000),
+          sources: [],
+        },
       ]);
+      setTestOpen(false);
     } catch (e) {
       message.error(String(e));
     } finally {
@@ -386,7 +429,10 @@ export default function QaPanel() {
                         <div key={s.name} style={{ marginBottom: 8, padding: "6px 8px", background: "#f8fafc", borderRadius: 6, border: "1px solid #e2e8f0" }}>
                           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                             <Tag color="blue" style={{ fontWeight: 600, margin: 0 }}>{s.name}</Tag>
-                            <Button size="small" danger type="link" style={{ padding: 0 }} onClick={() => onDeleteMcp(s.name)}>删除</Button>
+                            <Space size={4}>
+                              <Button size="small" type="link" style={{ padding: 0 }} onClick={() => openMcpTest(s.name)}>测试</Button>
+                              <Button size="small" danger type="link" style={{ padding: 0 }} onClick={() => onDeleteMcp(s.name)}>删除</Button>
+                            </Space>
                           </div>
                           <div style={{ paddingLeft: 4, marginTop: 4 }}>
                             {s.tools.map((t) => (
@@ -407,10 +453,6 @@ export default function QaPanel() {
                         例：命令填 npx -y @modelcontextprotocol/server-weather，参数填 --help
                       </Text>
                     </div>
-
-                    <Button size="small" type="primary" loading={mcpTesting} onClick={testMcp} style={{ marginTop: 8 }}>
-                      实测：GitHub 仓库搜索
-                    </Button>
                   </div>
                 ),
               },
@@ -476,6 +518,49 @@ export default function QaPanel() {
           </Space.Compact>
         </div>
       </Card>
+
+      <Modal
+        title={`测试 MCP 工具（${testServer}）`}
+        open={testOpen}
+        onCancel={() => setTestOpen(false)}
+        onOk={runMcpTest}
+        okText="调用"
+        confirmLoading={mcpTesting}
+        width={520}
+      >
+        <Text strong style={{ fontSize: 12 }}>工具</Text>
+        <Select
+          style={{ width: "100%", margin: "4px 0 10px" }}
+          size="small"
+          value={testTool}
+          onChange={(v) => {
+            setTestTool(v);
+            const t = mcpTools.find((x) => x.tool === v);
+            const props = t?.inputSchema || {};
+            const sample: Record<string, string> = {};
+            for (const [k, vv] of Object.entries(props)) {
+              if (vv?.type === "string" && Object.keys(sample).length < 2) {
+                sample[k] = k === "q" || k === "query" ? "台积电 2nm 产能" : "示例值";
+              }
+            }
+            setTestArgsText(JSON.stringify(sample, null, 2));
+          }}
+          options={mcpTools
+            .filter((t) => t.server === testServer)
+            .map((t) => ({ value: t.tool, label: t.tool }))}
+        />
+        <Text strong style={{ fontSize: 12 }}>参数（JSON）</Text>
+        <Input.TextArea
+          rows={4}
+          style={{ marginTop: 4, fontFamily: "monospace", fontSize: 12 }}
+          value={testArgsText}
+          onChange={(e) => setTestArgsText(e.target.value)}
+          placeholder='{"query": "台积电 2nm 产能"}'
+        />
+        <Text type="secondary" style={{ fontSize: 11, display: "block", marginTop: 6 }}>
+          结果会追加到下方对话区。调用实时搜索会消耗网关 credits。
+        </Text>
+      </Modal>
     </div>
   );
 }

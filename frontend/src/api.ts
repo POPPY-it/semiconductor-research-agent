@@ -118,7 +118,7 @@ export function clearMemories() {
 export function mcpStatus() {
   return request<{
     servers: { name: string; tools: string[] }[];
-    tools: { server: string; tool: string; description: string }[];
+    tools: { server: string; tool: string; description: string; inputSchema: Record<string, { type?: string; description?: string }> }[];
   }>("/api/v1/mcp/status");
 }
 

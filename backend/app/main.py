@@ -248,6 +248,7 @@ def create_app(
                             "spec": spec,
                             "transport": "stdio",
                             "description": entry.get("description", ""),
+                            "inputSchema": entry.get("inputSchema", {}),
                         }
                 except Exception as e:  # noqa: BLE001
                     catalog[f"__error_{rec['name']}"] = {"server": rec["name"], "error": str(e)[:120]}
@@ -269,6 +270,7 @@ def create_app(
                         "headers": {"Authorization": f"Bearer {settings.MCP_HTTP_TOKEN}"},
                         "transport": "http",
                         "description": entry.get("description", ""),
+                        "inputSchema": entry.get("inputSchema", {}),
                     }
             app.state.mcp_catalog = catalog
         return app.state.mcp_catalog
@@ -288,7 +290,12 @@ def create_app(
                 servers.setdefault(entry["server"], []).append("__error__")
                 continue
             servers.setdefault(entry["server"], []).append(tname)
-            tools.append({"server": entry["server"], "tool": tname, "description": entry["description"][:120]})
+            tools.append({
+                "server": entry["server"],
+                "tool": tname,
+                "description": entry["description"][:120],
+                "inputSchema": (entry.get("inputSchema") or {}).get("properties", {}),
+            })
         return {
             "servers": [{"name": k, "tools": v} for k, v in servers.items()],
             "tools": tools,
