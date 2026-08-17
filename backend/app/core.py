@@ -44,6 +44,9 @@ class Settings:
     FALLBACK_LLM_MODEL: str = os.getenv("FALLBACK_LLM_MODEL", "")
     # Semantic Scholar API Key（可选，免费申请；未设置走匿名额度，易触发限流）
     SEMANTIC_SCHOLAR_API_KEY: str = os.getenv("SEMANTIC_SCHOLAR_API_KEY", "")
+    # 故障注入（P1-2 验收钩子）：逗号分隔的 URL 域名片段，命中即模拟外部 API 失败，
+    # 用于演示「arXiv 挂掉任务仍能用知识库+SEC 出报告」。空=不注入。
+    SIMULATED_API_FAILURES: str = os.getenv("SIMULATED_API_FAILURES", "")
     # MCP：要接入的 MCP Server 列表（逗号分隔），当前支持 github/fetch
     MCP_SERVERS: str = os.getenv("MCP_SERVERS", "github,fetch")
     GITHUB_TOKEN: str = os.getenv("GITHUB_TOKEN", "")

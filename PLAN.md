@@ -5,6 +5,11 @@
 > 队列为 ThreadPoolQueue（RQ 为预留）、鉴权为共享 Cookie Token（非 JWT）、
 > 数据源为 SEC/arXiv/PubMed/新闻 RSS 六个。
 > 整改建议见 [docs/企业认可改法.md](docs/企业认可改法.md)。
+>
+> **整改进度**：P0-1 口径统一 ✅ → 3 个 bug 修复 ✅ → P0-2 轨迹落盘 ✅ → P0-3 局部修订 ✅ →
+> P1-1 20 条评测集 + Harness ✅（首跑基线 `eval/metrics.md`）→ **P1-2 工具治理 ✅**
+> （schema 元信息 / 超时退避降级 / MCP 独立 Tool / 写稿问答检索统一，见 README「工具治理」节）→
+> P1-3 显式规划（大纲 → 按节写 → 按节质检）⏳ 待做。
 
 > 定位：基于开源内核 [smolagents](https://github.com/huggingface/smolagents)（Hugging Face）的二次开发，
 > 打造一个**从数据采集到研报产出、可部署上线的行业 Agent**。

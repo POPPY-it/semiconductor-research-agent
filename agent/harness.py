@@ -36,14 +36,21 @@ def evaluate_one(pipeline, task: dict) -> dict:
     meta = trace.get("meta", {})
     steps = trace.get("steps", [])
 
-    # CodeAgent 的工具调用记录为 python_interpreter，真实工具名出现在 model_output 代码里
+    # CodeAgent 的工具调用记录为 python_interpreter，真实工具名出现在代码里
+    # （model_output 或 python_interpreter 的 arguments，两处都扫）
     tools_used = {t["name"] for s in steps for t in s.get("tools", [])}
     for s in steps:
-        mo = s.get("model_output", "")
-        if isinstance(mo, str):
-            for t in task.get("required_tools", []):
-                if re.search(rf"\b{re.escape(t)}\s*\(", mo):
-                    tools_used.add(t)
+        for src in (s.get("model_output", ""),):
+            if isinstance(src, str):
+                for t in task.get("required_tools", []):
+                    if re.search(rf"\b{re.escape(t)}\s*\(", src):
+                        tools_used.add(t)
+        for tc in s.get("tools", []):
+            if tc.get("name") == "python_interpreter":
+                args = tc.get("arguments", "")
+                for t in task.get("required_tools", []):
+                    if re.search(rf"\b{re.escape(t)}\s*\(", args):
+                        tools_used.add(t)
     required_missing = sorted(set(task.get("required_tools", [])) - tools_used)
     numbers = meta.get("numbers", {})
     uncited_rate = numbers.get("uncited_rate", 1.0)

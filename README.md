@@ -26,7 +26,8 @@
 2. **质检有产品策略**：`caveat` 打横幅、`reject` 拒交；质检是"可验证性门槛"而非真伪判定（`docs/w4-m2m3-report.md`）。
 3. **服务层不是空壳**：Cookie 鉴权、限流、中断会话恢复、任务重试、索引与生成互斥、Prometheus 指标（`tests/test_enterprise.py` 覆盖）。
 4. **评测有方法论反思**：真实语料 Recall@5=0.127 已归因到粗粒度标注；faithfulness 偏低归因到 judge 上下文（`docs/p3-eval-report.md`）。
-5. **MCP 是真接上的**：`github` / `fetch` 两个 stdio Server，网页端可增删管理。
+5. **MCP 是真接上的**：`github` / `fetch` 两个 stdio Server，网页端可增删管理；每个 MCP 工具映射为**独立 Tool**（schema 来自 MCP inputSchema），不再用 `mcp_call` 调度器。
+6. **工具层可治理**：每个工具一份 schema 元信息（必填/范围/超时，`agent/tools.py` 的 `TOOL_META`）；外部 API（arXiv/S2/PubMed）统一超时 + 429/5xx 指数退避 + 降级文案——**人为注入故障（`SIMULATED_API_FAILURES`）任务仍能用知识库+SEC 出报告**；参数校验失败回给模型「哪错了」，不抛到编排器外面；写稿与问答检索统一走 `search_reranked`。
 
 ## 技术栈
 
@@ -60,7 +61,16 @@ SEC EDGAR 财报（32 篇全文）、arXiv 论文（49 篇）、PubMed 生物医
 - 检索指标：Recall@k / MRR / Precision（`agent/eval.py`，CI 回归用 mini 语料）
 - LLM-judge：faithfulness / answer_relevance
 - 方法论反思：见 `docs/p3-eval-report.md`
-- **Agent 级评测（成功率 / 无引用数字率 / 步数 / 成本）**：规划中（`docs/企业认可改法.md` P1-1）
+- **Agent 级评测（成功率 / 无引用数字率 / 步数 / 成本）**：20 条任务集（`eval/tasks.json`）+ `agent/harness.py`；首跑基线见 `eval/metrics.md`（P1-1）
+- 工具治理测试：超时降级 / 退避重试 / 参数校验文案 / MCP 独立 Tool / 检索统一（`tests/test_tools_governance.py`，P1-2）
+
+## 工具治理（P1-2）
+
+- **schema 元信息**：`agent/tools.py` 的 `TOOL_META`——每个工具的必填字段、取值范围、超时、来源、降级策略。
+- **参数校验**：越界/空值/非法 JSON 等返回「参数错误：…」给模型，由模型自行改用其他工具，不抛到编排器外面。
+- **外部 API 统一治理**：`external_get()`——连接类错误立即降级（不重试），429/5xx 指数退避最多 3 次，全部失败返回降级文案（含替代工具提示）；`SIMULATED_API_FAILURES=arxiv` 可注入故障做验收演示。
+- **MCP 独立 Tool**：`build_mcp_tools()` 把每个 MCP 工具映射成独立 Tool（名字/描述/inputs 直接来自 MCP inputSchema，必填字段 required），模型不再需要背工具名拼 JSON。
+- **检索统一**：写稿 `search_knowledge` 与问答证据面板都走 `search_reranked`（混合召回 + bge-reranker 精排）。
 
 ## 快速开始
 

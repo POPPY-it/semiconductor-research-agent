@@ -43,6 +43,10 @@ def serialize_step(step) -> dict:
     ao = getattr(step, "action_output", None)
     if ao is not None:
         d["action_output"] = str(ao)[:300]
+    # CodeAgent 执行代码后，工具返回值存在 observations（action_output 常为 None）
+    obs = getattr(step, "observations", None)
+    if obs is not None and ao is None:
+        d["action_output"] = str(obs)[:300]
     err = getattr(step, "error", None)
     if err is not None:
         d["error"] = str(err)[:300]
@@ -65,8 +69,9 @@ def collect_agent_steps(agent) -> list[dict]:
     """读取 agent.memory.steps 序列化；无 memory 的对象返回空。
 
     CodeAgent 的 ToolCall 记录为 python_interpreter，真实工具调用出现在
-    model_output 的代码里——这里用 agent.tools 的工具名扫描 `name(` 模式，
-    把实际调用的工具补进 step.tools，保证轨迹里工具可见。
+    代码里——但代码**不一定在 model_output**（实测 model_output 常为空，
+    完整代码在 python_interpreter 的 arguments 里）。这里把两处都扫一遍
+    `name(` 模式，把实际调用的工具补进 step.tools，保证轨迹里工具可见。
     """
     memory = getattr(agent, "memory", None)
     if memory is None:
@@ -75,15 +80,25 @@ def collect_agent_steps(agent) -> list[dict]:
     steps = []
     for s in getattr(memory, "steps", None) or []:
         d = serialize_step(s)
-        mo = d.get("model_output", "")
-        if isinstance(mo, str) and tool_names:
+        code_parts: list[str] = []
+        mo = d.get("model_output")
+        if isinstance(mo, str) and mo:
+            code_parts.append(mo)
+        for tc in getattr(s, "tool_calls", None) or []:
+            if getattr(tc, "name", "") == "python_interpreter":
+                code_parts.append(str(getattr(tc, "arguments", "")))
+        code_src = "\n".join(code_parts)
+        if code_src and tool_names:
             detected = [
                 {"name": n, "arguments": ""}
                 for n in tool_names
-                if re.search(rf"\b{re.escape(n)}\s*\(", mo)
+                if re.search(rf"\b{re.escape(n)}\s*\(", code_src)
             ]
             if detected:
-                d["tools"] = d.get("tools", []) + detected
+                existing = {t.get("name") for t in d.get("tools", [])}
+                d["tools"] = d.get("tools", []) + [
+                    x for x in detected if x["name"] not in existing
+                ]
         steps.append(d)
     return steps
 
