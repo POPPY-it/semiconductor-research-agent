@@ -97,3 +97,42 @@ def test_generate_injects_plan_into_researcher_task(tmp_path, monkeypatch):
     # basic_research 合规：报告自动追加投资建议免责声明
     assert result["report"].startswith("# 报告\n\n正文")
     assert "不构成任何投资建议" in result["report"]
+
+
+def test_data_discipline_in_researcher_instructions(monkeypatch):
+    """回归（A 方案）：Researcher 指令必须包含数据纪律——禁止编造精确数字、
+    允许「语料未覆盖」留白；QA 指令必须认可诚实留白。"""
+    from agent import orchestrator as orch
+
+    class FakeModel:
+        pass
+
+    class FakeRetriever:
+        documents = {}
+
+        def search_reranked(self, q, top_k=5):
+            return []
+
+    class FakeStore:
+        def query_articles(self, **kw):
+            return []
+
+    built: list[dict] = []
+
+    class FakeAgent:
+        def __init__(self, **kw):
+            built.append({"instructions": kw.get("instructions", ""), "max_steps": kw.get("max_steps")})
+
+    monkeypatch.setattr(orch, "CodeAgent", FakeAgent)
+    monkeypatch.setattr(orch.ReportPipeline, "_get_mcp_tools", lambda self: [])
+
+    pipe = orch.ReportPipeline(FakeRetriever(), FakeStore())
+    pipe._build_agents(FakeModel(), "weekly")
+
+    researcher_ins = built[0]["instructions"]  # 第一个是 researcher
+    assert "数据纪律" in researcher_ins
+    assert "禁止编造任何精确数字" in researcher_ins
+    assert "语料未覆盖" in researcher_ins
+
+    assert "诚实留白" in orch.QA_INSTRUCTIONS
+    assert "不列入 issues" in orch.QA_INSTRUCTIONS

@@ -44,6 +44,8 @@ QA_INSTRUCTIONS = (
     "你是事实质检员。校验给定报告的每个数字与论断是否能被检索结果支持。\n"
     "要求：问题必须注明所属小节（如『第2节 数据透视：…』）；"
     "无来源的精确数字必须列进 issues。\n"
+    "留白认可：报告明确声明「语料未覆盖/数据缺失/该期披露不可得」的表述视为诚实留白，"
+    "**不列入 issues**；但若同一处既声明缺失又给出精确数字，仍按无来源处理。\n"
     "检索纪律：优先用 search_knowledge / query_filings 核对；"
     "实时搜索工具（search_proxy_serper_news / search_proxy_tavily_search 等）**最多调用 2 次**，"
     "仅当报告里的实时新闻类论断无法用知识库核对时才使用，禁止逐条数字重搜。\n"
@@ -223,9 +225,12 @@ class ReportPipeline:
             f"4) 按「{template['sections']}」分节；"
             f"5) 正文不少于 {template['min_words']} 字；"
             f"6) 若报告含可量化对比数据（营收/增速/市场份额等），调用 generate_chart 生成图表嵌入对应小节；"
-            f"7) 检索纪律：优先用知识库（search_knowledge / query_filings）取材；"
+            f"7) 检索与数据纪律：优先用知识库（search_knowledge / query_filings）取材；"
             f"实时搜索工具（search_proxy_serper_news / search_proxy_tavily_search 等）每节最多 1 次，"
-            f"仅用于补充知识库没有的最新动态，禁止逐条数字反复搜索。"
+            f"仅用于补充知识库没有的最新动态，禁止逐条数字反复搜索；"
+            f"**数据纪律**：精确财务数字（金额/百分比/增速）必须来自 query_filings / search_knowledge "
+            f"的 SEC 语料并附来源链接；检索不到精确数据时，明确写「当前语料未覆盖该公司该期披露」"
+            f"或改用定性表述，**禁止编造任何精确数字（包括编造精确到小数的数据）**。"
         )
         if template.get("cite_format"):
             extra += f"8) {template['cite_format']}。"
@@ -331,7 +336,9 @@ class ReportPipeline:
                 "researcher",
                 f"质检反馈的问题：{json.dumps(verdict.get('issues', []), ensure_ascii=False)}。"
                 "请**只修订与上述问题直接相关的段落**（修正数字、补充来源链接、删除无法验证的论断），"
-                "其余内容保持原样；最后输出修订后的完整 Markdown 报告。",
+                "其余内容保持原样；最后输出修订后的完整 Markdown 报告。"
+                "**输出纪律：直接输出报告正文本身（从 # 标题开始），"
+                "禁止输出研究过程、验证清单、'Based on…'、'以下是修订…' 等任何过程性文字。**",
                 reset=False,
             )
 
