@@ -31,6 +31,68 @@ def test_build_plan_default_sections_when_template_empty():
     assert "数据透视" in plan
 
 
+def test_build_plan_includes_paragraph_citation_rule():
+    plan = build_plan("台积电", {})
+    assert "每个段落结尾必须带 [来源](url)" in plan
+
+
+class _FakeModel:
+    """生成指定文本的假模型（LLM 规划测试）。"""
+
+    def __init__(self, text):
+        self._text = text
+
+    def generate(self, messages, **kw):
+        return type("M", (), {"content": self._text})()
+
+
+def test_build_plan_llm_parses_json_and_format():
+    from agent.planner import build_plan_llm, format_plan
+
+    fake = _FakeModel(
+        '{"sections": [{"title": "行业背景", "focus": "存储周期位置", '
+        '"search_queries": ["存储芯片 周期", "memory cycle 2026"]}, '
+        '{"title": "公司分析", "focus": "台积电财务", '
+        '"search_queries": ["台积电 营收", "TSMC revenue"]}]}'
+    )
+    plan = build_plan_llm("存储行业", {"sections": "行业背景/公司分析"}, fake)
+    assert plan is not None
+    assert len(plan["sections"]) == 2
+    assert plan["sections"][0]["title"] == "行业背景"
+
+    text = format_plan(plan, "存储行业")
+    assert "LLM 多视角大纲" in text
+    assert "行业背景" in text and "台积电 营收" in text
+    assert "每个段落结尾必须带 [来源](url)" in text
+
+
+def test_build_plan_llm_falls_back_on_garbage():
+    from agent.planner import build_plan_llm
+
+    assert build_plan_llm("x", {}, _FakeModel("不是 JSON")) is None
+    assert build_plan_llm("x", {}, _FakeModel('{"sections": []}')) is None
+
+    class _Boom:
+        def generate(self, messages, **kw):
+            raise RuntimeError("llm down")
+
+    assert build_plan_llm("x", {}, _Boom()) is None  # 失败不阻塞任务
+
+
+def test_citation_density_metric():
+    from agent.traces import citation_density
+
+    md = (
+        "第一段有引用 [来源](https://a.com)\n\n"
+        "第二段带裸链接 https://b.com\n\n"
+        "第三段没有任何来源，只有文字描述，这算未引用段落\n\n"
+        "第四段结尾 300 字符内有链接 https://c.com（稍远的距离）"
+    )
+    d = citation_density(md)
+    assert d == 0.75  # 4 段中 3 段带链接（第三段无）
+    assert citation_density("") == 0.0
+
+
 def test_generate_injects_plan_into_researcher_task(tmp_path, monkeypatch):
     """回归：Researcher 首轮任务必须带规划前缀；轨迹 meta 记录 plan。"""
     from agent import orchestrator as orch

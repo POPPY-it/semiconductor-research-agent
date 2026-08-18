@@ -27,6 +27,7 @@ from agent.llm import (  # noqa: E402
 )
 from agent.traces import (  # noqa: E402
     analyze_numbers,
+    citation_density,
     collect_agent_steps,
     new_run_id,
     save_trace,
@@ -230,12 +231,15 @@ class ReportPipeline:
             f"仅用于补充知识库没有的最新动态，禁止逐条数字反复搜索；"
             f"**数据纪律**：精确财务数字（金额/百分比/增速）必须来自 query_filings / search_knowledge "
             f"的 SEC 语料并附来源链接；检索不到精确数据时，明确写「当前语料未覆盖该公司该期披露」"
-            f"或改用定性表述，**禁止编造任何精确数字（包括编造精确到小数的数据）**。"
+            f"或改用定性表述，**禁止编造任何精确数字（包括编造精确到小数的数据）**；"
+            f"8) 分节写作与段落引用纪律（STORM 路线）：按规划逐节撰写，每节先按检索词完成检索再写该节，"
+            f"写完一节再进入下一节；**每个段落结尾必须带 [来源](url) 链接**——没有来源的段落不允许出现，"
+            f"宁可写短也要带来源。"
         )
         if template.get("cite_format"):
-            extra += f"8) {template['cite_format']}。"
+            extra += f"9) {template['cite_format']}。"
         if template.get("safety"):
-            extra += f"9) {template['safety']}"
+            extra += f"10) {template['safety']}"
         mcp_tools = self._get_mcp_tools()
         base_tools = [search_knowledge, query_filings, search_arxiv, search_semantic_scholar, search_graph, search_pubmed]
         base_tools += mcp_tools
@@ -315,10 +319,17 @@ class ReportPipeline:
                 )
         except Exception:  # noqa: BLE001
             pass
-        # P1-3 显式规划：先出大纲（规则模板，零成本、可评测），随轨迹落盘
-        from agent.planner import build_plan
+        # P1-3 + STORM 路线：显式规划——优先 LLM 多视角大纲（一次调用），失败回落规则模板
+        from agent.planner import build_plan, build_plan_llm, format_plan
 
-        plan = build_plan(topic, REPORT_TEMPLATES.get(report_type))
+        template = REPORT_TEMPLATES.get(report_type, {})
+        plan = build_plan(topic, template)  # 规则版兜底
+        try:
+            llm_plan = build_plan_llm(topic, template, build_model())
+            if llm_plan:
+                plan = format_plan(llm_plan, topic)
+        except Exception:  # noqa: BLE001 —— 规划失败不阻塞
+            pass
         draft = guarded_run("researcher", mem_ctx + plan + "\n\n" + f"撰写研报：{topic}")
         verdict: dict | None = None
         rounds = 0
@@ -369,6 +380,7 @@ class ReportPipeline:
                 "budget_used_chars": primary.used_chars,
                 "duration_s": round(time.time() - t0, 2),
                 "numbers": analyze_numbers(draft),
+                "citation_density": citation_density(draft),  # STORM 路线：段落级引用密度
                 "report_path": str(out_path),
             },
         )

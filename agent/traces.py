@@ -126,6 +126,21 @@ def analyze_numbers(md: str) -> dict:
     }
 
 
+def citation_density(md: str) -> float:
+    """段落级引用密度（STORM 路线指标）：空行分隔的正文块中，带来源链接的块占比。
+
+    判定：块内含 Markdown 链接 `[..](http..)` 或块内后 300 字符含 http 即视为已引用。
+    """
+    blocks = [b.strip() for b in re.split(r"\n\s*\n", md or "") if b.strip()]
+    if not blocks:
+        return 0.0
+    cited = 0
+    for b in blocks:
+        if re.search(r"\[[^\]]*\]\(https?://", b) or "http" in b.lower()[-300:]:
+            cited += 1
+    return round(cited / len(blocks), 3)
+
+
 def save_trace(
     trace_dir: str | Path,
     run_id: str,
