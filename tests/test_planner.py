@@ -93,6 +93,21 @@ def test_citation_density_metric():
     assert citation_density("") == 0.0
 
 
+def test_number_citation_rate_metric():
+    from agent.traces import number_citation_rate
+
+    md = (
+        "台积电净收入 182 亿美元[来源](https://a.com)，同比 +58%。\n"
+        "毛利率 54% 是一个没有紧邻来源的数字，后面跟着很长的一段纯文字描述，"
+        "这段文字会填满八十个字符的窗口让链接无法出现在窗口内，从而该数字应被判定为未引用。\n"
+        "先进工艺占比 77% [来源](https://c.com)。"
+    )
+    r = number_citation_rate(md)
+    # 182亿 与 77% 紧邻来源（cited）；58% 与 54% 的 80 字符窗口内无链接（not cited）
+    assert r == 0.5
+    assert number_citation_rate("") == 0.0
+
+
 def test_generate_injects_plan_into_researcher_task(tmp_path, monkeypatch):
     """回归：Researcher 首轮任务必须带规划前缀；轨迹 meta 记录 plan。"""
     from agent import orchestrator as orch

@@ -141,6 +141,23 @@ def citation_density(md: str) -> float:
     return round(cited / len(blocks), 3)
 
 
+def number_citation_rate(md: str) -> float:
+    """数字级引用率（对标 Deep Research 样本）：精确数字后**紧邻**（80 字符内）是否有来源。
+
+    比 analyze_numbers 的 120 字符窗口更严：链接必须在数字附近（同一句/行内），
+    写作纪律要求「每个精确数字后紧跟 [来源](url)」。
+    注意：日期/编号（如 2026、序号）也会被计入——启发式局限，报告中如实说明。
+    """
+    total = 0
+    cited = 0
+    for m in _NUMBER_RE.finditer(md or ""):
+        total += 1
+        window = md[m.end() : m.end() + 80]
+        if re.search(r"\[[^\]]*\]\(https?://", window) or "http" in window.lower():
+            cited += 1
+    return round(cited / total, 3) if total else 0.0
+
+
 def save_trace(
     trace_dir: str | Path,
     run_id: str,

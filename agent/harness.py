@@ -55,6 +55,7 @@ def evaluate_one(pipeline, task: dict) -> dict:
     numbers = meta.get("numbers", {})
     uncited_rate = numbers.get("uncited_rate", 1.0)
     citation_density = meta.get("citation_density", 0.0)
+    number_citation_rate = meta.get("number_citation_rate", 0.0)
     verdict_passed = bool((meta.get("verdict") or {}).get("passed"))
     # 成功率口径：质检通过，或 caveat 但无「无来源数字」
     success = verdict_passed or uncited_rate == 0.0
@@ -66,6 +67,7 @@ def evaluate_one(pipeline, task: dict) -> dict:
         "verdict_passed": verdict_passed,
         "uncited_rate": uncited_rate,
         "citation_density": citation_density,
+        "number_citation_rate": number_citation_rate,
         "numbers_total": numbers.get("total_numbers", 0),
         "numbers_without_url": numbers.get("numbers_without_url", 0),
         "steps": len(steps),
@@ -90,6 +92,7 @@ def summarize(results: list[dict]) -> dict:
         "success_rate": round(sum(1 for r in done if r["success"]) / n, 3),
         "avg_uncited_rate": round(sum(r["uncited_rate"] for r in done) / n, 3),
         "avg_citation_density": round(sum(r["citation_density"] for r in done) / n, 3),
+        "avg_number_citation_rate": round(sum(r["number_citation_rate"] for r in done) / n, 3),
         "avg_steps": round(sum(r["steps"] for r in done) / n, 1),
         "avg_tool_calls": round(sum(r["tool_calls"] for r in done) / n, 1),
         "avg_errors": round(sum(r["errors"] for r in done) / n, 2),
@@ -119,6 +122,7 @@ def write_outputs(results: list[dict], summary: dict) -> None:
         f"| **任务成功率** | {summary.get('success_rate', 0)} |",
         f"| **无引用数字率（均值）** | {summary.get('avg_uncited_rate', 0)} |",
         f"| **段落引用密度（均值）** | {summary.get('avg_citation_density', 0)} |",
+        f"| **数字级引用率（均值）** | {summary.get('avg_number_citation_rate', 0)} |",
         f"| **平均步骤数** | {summary.get('avg_steps', 0)} |",
         f"| 平均工具调用 | {summary.get('avg_tool_calls', 0)} |",
         f"| 平均错误数 | {summary.get('avg_errors', 0)} |",
@@ -127,18 +131,20 @@ def write_outputs(results: list[dict], summary: dict) -> None:
         "",
         "## 逐任务",
         "",
-        "| id | 状态 | 成功 | 无引用率 | 引用密度 | 步数 | 工具调用 | 错误 | 耗时s | 缺工具 |",
-        "|---|---|---|---|---|---|---|---|---|---|",
+        "| id | 状态 | 成功 | 无引用率 | 引用密度 | 数字引用率 | 步数 | 工具调用 | 错误 | 耗时s | 缺工具 |",
+        "|---|---|---|---|---|---|---|---|---|---|---|",
     ]
     for r in results:
         if r["status"] == "done":
             lines.append(
-                f"| {r['id']} | done | {r['success']} | {r['uncited_rate']} | {r['citation_density']} | "
-                f"{r['steps']} | {r['tool_calls']} | {r['errors']} | {r['duration_s']} | "
-                f"{','.join(r['required_tools_missing']) or '-'} |"
+                f"| {r['id']} | done | {r['success']} | {r['uncited_rate']} | {r['citation_density']} "
+                f"| {r['number_citation_rate']} | {r['steps']} | {r['tool_calls']} | {r['errors']} "
+                f"| {r['duration_s']} | {','.join(r['required_tools_missing']) or '-'} |"
             )
         else:
-            lines.append(f"| {r['id']} | error | - | - | - | - | - | - | - | {r.get('error', '')[:40]} |")
+            lines.append(
+                f"| {r['id']} | error | - | - | - | - | - | - | - | - | {r.get('error', '')[:40]} |"
+            )
     METRICS_PATH.write_text("\n".join(lines), encoding="utf-8")
 
 

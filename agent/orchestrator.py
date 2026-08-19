@@ -30,6 +30,7 @@ from agent.traces import (  # noqa: E402
     citation_density,
     collect_agent_steps,
     new_run_id,
+    number_citation_rate,
     save_trace,
 )
 from backend.app.core import settings  # noqa: E402
@@ -43,8 +44,11 @@ RESEARCHER_INSTRUCTIONS = (
 
 QA_INSTRUCTIONS = (
     "你是事实质检员。校验给定报告的每个数字与论断是否能被检索结果支持。\n"
-    "要求：问题必须注明所属小节（如『第2节 数据透视：…』）；"
-    "无来源的精确数字必须列进 issues。\n"
+    "要求：问题必须注明所属小节（如『第2节 数据透视：…』）。\n"
+    "数字级引用口径：精确数字（金额/百分比/增速）的来源链接必须**紧邻该数字**"
+    "（同一句或同一行内，如 `182 亿美元[来源](url)`）；"
+    "仅段落末尾有链接而数字本身无紧邻来源的，按无来源处理并列入 issues；"
+    "段落级检查：没有来源链接的段落必须列入 issues。\n"
     "留白认可：报告明确声明「语料未覆盖/数据缺失/该期披露不可得」的表述视为诚实留白，"
     "**不列入 issues**；但若同一处既声明缺失又给出精确数字，仍按无来源处理。\n"
     "检索纪律：优先用 search_knowledge / query_filings 核对；"
@@ -234,12 +238,15 @@ class ReportPipeline:
             f"或改用定性表述，**禁止编造任何精确数字（包括编造精确到小数的数据）**；"
             f"8) 分节写作与段落引用纪律（STORM 路线）：按规划逐节撰写，每节先按检索词完成检索再写该节，"
             f"写完一节再进入下一节；**每个段落结尾必须带 [来源](url) 链接**——没有来源的段落不允许出现，"
-            f"宁可写短也要带来源。"
+            f"宁可写短也要带来源；"
+            f"9) 数字级引用纪律（对标 Deep Research 样本）：**每个精确数字（金额/百分比/增速/单价）后"
+            f"紧跟 [来源](url)**，来源与数字在同一句或同一行（如 `182 亿美元[来源](https://…)`）；"
+            f"不带紧邻来源的精确数字不允许出现——检索不到就删掉该数字或用定性表述。"
         )
         if template.get("cite_format"):
-            extra += f"9) {template['cite_format']}。"
+            extra += f"10) {template['cite_format']}。"
         if template.get("safety"):
-            extra += f"10) {template['safety']}"
+            extra += f"11) {template['safety']}"
         mcp_tools = self._get_mcp_tools()
         base_tools = [search_knowledge, query_filings, search_arxiv, search_semantic_scholar, search_graph, search_pubmed]
         base_tools += mcp_tools
@@ -335,7 +342,7 @@ class ReportPipeline:
         rounds = 0
         for rounds in range(1, 3):  # 质检不过最多修订 2 轮
             verdict = None
-            for _attempt in range(2):  # 解析失败重试一次
+            for _attempt in range(3):  # 解析失败重试（最多 3 次，容忍模型偶发输出不规范）
                 verdict = _extract_json(guarded_run("qa", f"请校验以下报告：\n\n{draft}", reset=False))
                 if verdict is not None:
                     break
@@ -381,6 +388,7 @@ class ReportPipeline:
                 "duration_s": round(time.time() - t0, 2),
                 "numbers": analyze_numbers(draft),
                 "citation_density": citation_density(draft),  # STORM 路线：段落级引用密度
+                "number_citation_rate": number_citation_rate(draft),  # 数字级引用率（Deep Research 对标）
                 "report_path": str(out_path),
             },
         )
