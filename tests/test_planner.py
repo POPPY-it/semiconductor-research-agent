@@ -181,6 +181,36 @@ def test_source_level_classification():
     assert s["official_ratio"] == 0.5  # 官方+学术 / 总数
 
 
+def test_claim_support_rate():
+    """差距收敛第 5 项：数字论断须在检索证据中出现（claim→source→span）。"""
+    from agent.evidence import build_evidence_index, claim_support_rate, extract_numeric_claims
+
+    tool_outputs = [
+        "台积电7月营收 4,675.8 亿新台币 同比 +44.7% (来源: https://www.sec.gov/tsm.htm)",
+        "存储芯片价格涨幅超 200% (来源: https://www.ithome.com/x)",
+    ]
+    # 报告含 3 个带单位数字论断：4,675.8 亿（有证据）、+44.7%（有证据）、99.9%（无证据）
+    report = (
+        "台积电 7 月营收 4,675.8 亿新台币[来源](https://www.sec.gov/tsm.htm)，"
+        "同比 +44.7%[来源](https://www.sec.gov/tsm.htm)。\n"
+        "另有传闻占比 99.9%[来源](https://www.ithome.com/y)。"
+    )
+    claims = extract_numeric_claims(report)
+    assert len(claims) == 2  # 第一句含两个数字算同一论断，第二句一条
+    # 年份/编号不计入
+    assert extract_numeric_claims("2026 年 3 家公司披露 0001046179 文件") == []
+
+    r = claim_support_rate(report, tool_outputs)
+    assert r["total"] == 2
+    assert r["supported"] == 1  # 论断1（4,675.8 亿 + 44.7%）有证据；论断2（99.9%）无
+    assert r["rate"] == 0.5
+    assert any("99.9%" in c for c in r["unsupported"])
+
+    idx = build_evidence_index(tool_outputs)
+    assert "4,675.8 亿" in idx  # 数字倒排索引命中（键带单位）
+    assert idx["4,675.8 亿"][0]["url"] == "https://www.sec.gov/tsm.htm"
+
+
 def test_generate_injects_plan_into_researcher_task(tmp_path, monkeypatch):
     """回归：Researcher 首轮任务必须带规划前缀；轨迹 meta 记录 plan。"""
     from agent import orchestrator as orch

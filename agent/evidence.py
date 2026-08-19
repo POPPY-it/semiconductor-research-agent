@@ -97,6 +97,94 @@ def report_source_levels(md: str) -> dict:
     }
 
 
+# ---------------------------------------------------------------- claim→source→span（差距收敛第 5 项）
+
+# 有意义的数字：带单位/百分比的金额、增速、占比（排除年份/编号等 4 位纯数字）
+_MEANINGFUL_NUMBER_RE = re.compile(
+    r"(?<!\d)\d{1,3}(?:,\d{3})*(?:\.\d+)?\s*(?:%|％|亿|万|千|百万|美元|欧元|新台币|"
+    r"亿元|亿美元|亿元人民币|亿新台币|片|座|倍)"
+)
+# 句号/换行切句
+_SENT_SPLIT_RE = re.compile(r"(?<=[。！？；\n])")
+
+
+def extract_numeric_claims(md: str) -> list[dict]:
+    """从报告提取**带单位数字的论断**（claim→source 的 claim 侧）。
+
+    每条：{"claim": 含数字的句子, "numbers": 句中的有意义数字列表, "section": 所在节标题}。
+    过滤：纯年份/编号（4 位无单位数字）不计入——只盯"金额/增速/占比"类论断。
+    """
+    claims: list[dict] = []
+    section = ""
+    for raw in _SENT_SPLIT_RE.split(md or ""):
+        line = raw.strip()
+        if not line:
+            continue
+        if line.startswith("#"):
+            section = line.lstrip("#").strip()[:30]
+            continue
+        nums = _MEANINGFUL_NUMBER_RE.findall(line)
+        if not nums:
+            continue
+        # 去重且只保留"金额/百分比/倍"类（过滤单位后）
+        meaningful = [n for n in nums if n.strip()]
+        if meaningful:
+            claims.append(
+                {
+                    "claim": line[:160],
+                    "numbers": meaningful,
+                    "section": section,
+                }
+            )
+    return claims
+
+
+def build_evidence_index(tool_outputs: list[str]) -> dict[str, list[dict]]:
+    """证据池索引（source→span 侧）：数字 -> [证据条目]。
+
+    每个证据条目：{"url": 出处, "span": URL 前 80 字符的原文片段}。
+    对未截断的工具返回，按 URL 切证据块，块内出现的有意义数字建立倒排。
+    """
+    index: dict[str, list[dict]] = {}
+    for text in tool_outputs or []:
+        for m in _URL_RE.finditer(text or ""):
+            url = m.group(0).rstrip(".,;")
+            start = max(0, m.start() - 80)
+            span = re.sub(r"\s+", " ", text[start : m.start()]).strip()[-80:]
+            nums = _MEANINGFUL_NUMBER_RE.findall(span)
+            for n in set(nums):
+                index.setdefault(n, []).append({"url": url, "span": span})
+    return index
+
+
+def claim_support_rate(report_md: str, tool_outputs: list[str]) -> dict:
+    """数字级 claim 支持率：报告中带单位数字的论断，其数字是否在检索证据中出现过。
+
+    比 number_citation_rate 更进一步：不仅"数字后有链接"，还验证"链接对应的检索
+    证据里真的出现过该数字"——防"链接是真的但内容不含该数字"。
+    返回 {"total": 论断数, "supported": 命中数, "unsupported": 抽样,
+    "rate": 支持率}。
+    """
+    claims = extract_numeric_claims(report_md or "")
+    if not claims:
+        return {"total": 0, "supported": 0, "unsupported": [], "rate": 1.0}
+    index = build_evidence_index(tool_outputs)
+    supported = 0
+    unsupported: list[str] = []
+    for c in claims:
+        if any(n in index for n in c["numbers"]):
+            supported += 1
+        else:
+            unsupported.append(c["claim"][:60])
+    total = len(claims)
+    return {
+        "total": total,
+        "supported": supported,
+        "unsupported": unsupported[:10],
+        "rate": round(supported / total, 3) if total else 1.0,
+    }
+
+
 def extract_urls_with_context(text: str, window: int = 80) -> list[dict]:
     """从一段文本提取 (url, 上下文片段) 条目。
 

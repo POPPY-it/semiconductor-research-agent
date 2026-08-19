@@ -33,6 +33,9 @@ class Settings:
     # 证据包门禁（差距收敛第 1 项）：报告 URL 必须来自检索结果（URL 落地率），
     # 低于该阈值视为模型编造 URL——确定性检出，与 LLM 质检独立。
     MIN_URL_GROUNDING_RATE: float = float(os.getenv("MIN_URL_GROUNDING_RATE", "0.8"))
+    # claim 支持率门禁（差距收敛第 5 项）：报告带单位数字的论断中，其数字须在检索
+    # 证据中出现过（防"链接真实但内容不含该数字"）；低于阈值门禁不通过。
+    MIN_CLAIM_SUPPORT_RATE: float = float(os.getenv("MIN_CLAIM_SUPPORT_RATE", "0.5"))
     # 单任务 token 预算（估算字符数）：超预算熔断。
     # 真实负载校准（W8 实测）：日报含 2 轮修订约消耗 110~160 万字符 → 默认 400 万留余量。
     # 接入实时搜索工具后（2026-08-17 实测）：研究+质检一轮约消耗 390~400 万字符

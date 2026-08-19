@@ -416,10 +416,16 @@ class ReportPipeline:
         # 证据包落地（差距收敛第 1 项）：报告 URL 必须来自检索结果（grounding）
         # 用未截断的工具返回校验（轨迹序列化会截断，防误判）
         # 来源分级（差距收敛第 3 项）：官方/学术来源占比
-        from agent.evidence import check_url_grounding, report_source_levels
+        # claim 支持率（差距收敛第 5 项）：数字论断是否在检索证据中出现
+        from agent.evidence import (
+            check_url_grounding,
+            claim_support_rate,
+            report_source_levels,
+        )
 
         grounding = check_url_grounding(draft, raw_tool_outputs)
         source_levels = report_source_levels(draft)
+        claims = claim_support_rate(draft, raw_tool_outputs)
 
         # 轨迹落盘：步骤 + 质检 + 预算 + 耗时 + 数字引用分析 + URL 落地率
         trace_path = save_trace(
@@ -441,6 +447,7 @@ class ReportPipeline:
                 "number_citation_rate": number_citation_rate(draft),  # 数字级引用率（Deep Research 对标）
                 "url_grounding": grounding,  # 证据包：URL 落地率（报告 URL 必须来自检索结果）
                 "source_levels": source_levels,  # 来源分级：官方/学术占比（差距收敛第 3 项）
+                "claim_support": claims,  # claim 支持率（差距收敛第 5 项）
                 "report_path": str(out_path),
             },
         )
@@ -453,6 +460,7 @@ class ReportPipeline:
             "model_used": ("fallback" if used_fallback[0] else "primary"),
             "budget_used_chars": primary.used_chars,
             "url_grounding": grounding,
+            "claim_support": claims,
             "trace_path": str(trace_path),
         }
 
