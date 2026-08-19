@@ -19,6 +19,83 @@ from urllib.parse import urlparse
 
 _URL_RE = re.compile(r"https?://[^\s\)\]\}>\"'，。；、]+")
 
+# ---------------------------------------------------------------- 来源分级（差距收敛第 3 项）
+
+# 官方/监管/公司披露（L0）
+_OFFICIAL_DOMAINS = {
+    "sec.gov", "tsmc.com", "nvidia.com", "intc.com", "asml.com", "intel.com",
+    "samsung.com", "skhynix.com", "micron.com", "investor.tsmc.com", "pr.tsmc.com",
+    "nasa.gov", "trendforce.com", "macrotrends.net", "companiesmarketcap.com",
+    "semiconductors.org", "semi.org", "w3.org", "github.com",
+}
+# 学术/文献（L1）
+_ACADEMIC_DOMAINS = {
+    "arxiv.org", "pubmed.ncbi.nlm.nih.gov", "semanticscholar.org", "springer.com",
+    "ieee.org", "acm.org", "nature.com", "science.org", "doi.org", "ssrn.com",
+    "osf.io", "researchgate.net",
+}
+# 主流媒体/行业媒体（L2）
+_MEDIA_DOMAINS = {
+    "ithome.com", "sina.com.cn", "sina.cn", "21jingji.com", "wallstreetcn.com",
+    "reuters.com", "bloomberg.com", "cnbc.com", "wsj.com", "ft.com", "nytimes.com",
+    "eet-china.com", "36kr.com", "jiemian.com", "yicai.com", "cls.cn", "sohu.com",
+    "qq.com", "qq.com.cn", "163.com", "eastmoney.com", "investing.com", "wccftech.com",
+    "techpowerup.com", "semiwiki.com", "tomshardware.com", "anandtech.com",
+    "yahoofinance.com", "finance.yahoo.com", "moomoo.com", "tradingkey.com",
+}
+
+
+def source_level(url: str) -> int:
+    """来源可信度分级：0=官方披露 1=学术文献 2=主流媒体 3=聚合/未知。
+
+    规则：取注册域（最后两级），白名单匹配；未命中视为聚合/未知。
+    """
+    host = (urlparse(url).netloc or "").lower()
+    if not host:
+        return 3
+    # 去掉 www 前缀
+    if host.startswith("www."):
+        host = host[4:]
+    if host in _OFFICIAL_DOMAINS:
+        return 0
+    if host in _ACADEMIC_DOMAINS:
+        return 1
+    if host in _MEDIA_DOMAINS:
+        return 2
+    # 尾缀匹配（如 xxx.sec.gov 子域、sina 子域）
+    for d in _OFFICIAL_DOMAINS:
+        if host.endswith("." + d):
+            return 0
+    for d in _ACADEMIC_DOMAINS:
+        if host.endswith("." + d):
+            return 1
+    for d in _MEDIA_DOMAINS:
+        if host.endswith("." + d):
+            return 2
+    return 3
+
+
+_LEVEL_LABELS = {0: "官方", 1: "学术", 2: "媒体", 3: "聚合"}
+
+
+def source_level_label(url: str) -> str:
+    return _LEVEL_LABELS.get(source_level(url), "聚合")
+
+
+def report_source_levels(md: str) -> dict:
+    """报告引用的来源等级分布：{counts: {0: n, ...}, official_ratio: 官方+学术占比}。"""
+    counts = {0: 0, 1: 0, 2: 0, 3: 0}
+    total = 0
+    for u in report_urls(md or ""):
+        counts[source_level(u)] += 1
+        total += 1
+    official = counts[0] + counts[1]
+    return {
+        "counts": counts,
+        "total": total,
+        "official_ratio": round(official / total, 3) if total else 1.0,
+    }
+
 
 def extract_urls_with_context(text: str, window: int = 80) -> list[dict]:
     """从一段文本提取 (url, 上下文片段) 条目。

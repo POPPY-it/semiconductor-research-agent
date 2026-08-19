@@ -192,11 +192,15 @@ def make_tools(retriever, store) -> list:
             hits = retriever.search_reranked(kw, top_k=lim)
         except Exception as e:  # noqa: BLE001 —— 检索异常也回给模型，不炸任务
             return f"（知识库检索失败：{e}，请稍后重试）"
+        from agent.evidence import source_level_label
+
         lines = []
         for doc_id, score in hits:
             doc = retriever.documents[doc_id]
+            url = doc.meta.get("url", "")
             lines.append(
-                f"[相关度 {score:.2f}] {doc.text[:240]}... (来源: {doc.meta.get('url', '')})"
+                f"[相关度 {score:.2f}] {doc.text[:240]}... "
+                f"(来源: {url} [{source_level_label(url)}])"
             )
         return "\n---\n".join(lines) or "（无结果）"
 
@@ -234,11 +238,15 @@ def make_tools(retriever, store) -> list:
                 hits = retriever.search_reranked(q, top_k=lim)
             except Exception as e:  # noqa: BLE001 —— 单条失败不阻塞整体
                 return f"（查询「{q}」失败：{e}）"
+            from agent.evidence import source_level_label
+
             lines = []
             for doc_id, score in hits:
                 doc = retriever.documents[doc_id]
+                url = doc.meta.get("url", "")
                 lines.append(
-                    f"[相关度 {score:.2f}] {doc.text[:200]}... (来源: {doc.meta.get('url', '')})"
+                    f"[相关度 {score:.2f}] {doc.text[:200]}... "
+                    f"(来源: {url} [{source_level_label(url)}])"
                 )
             return "\n".join(lines) or "（无结果）"
 

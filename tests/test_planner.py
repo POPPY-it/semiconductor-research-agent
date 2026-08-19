@@ -158,6 +158,29 @@ def test_url_grounding_detects_fabricated_urls():
     assert check_url_grounding("无链接正文", tool_outputs)["rate"] == 1.0
 
 
+def test_source_level_classification():
+    """差距收敛第 3 项：来源分级（官方/学术/媒体/聚合）与报告占比统计。"""
+    from agent.evidence import report_source_levels, source_level
+
+    assert source_level("https://www.sec.gov/archives/x.htm") == 0  # 官方
+    assert source_level("https://pr.tsmc.com/english/news/3329") == 0  # 官方（子域尾缀）
+    assert source_level("https://arxiv.org/abs/2608.1") == 1  # 学术
+    assert source_level("https://pubmed.ncbi.nlm.nih.gov/36576964/") == 1
+    assert source_level("https://www.ithome.com/0/989/912.htm") == 2  # 媒体
+    assert source_level("https://wallstreetcn.com/articles/3774694") == 2
+    assert source_level("https://news.google.com/rss/articles/x") == 3  # 聚合
+    assert source_level("https://evil.example.com/fake") == 3  # 未知
+
+    md = (
+        "官方数据[来源](https://www.sec.gov/x) 与学术[来源](https://arxiv.org/a)"
+        "及媒体[来源](https://www.ithome.com/x)和聚合[来源](https://news.google.com/x)"
+    )
+    s = report_source_levels(md)
+    assert s["total"] == 4
+    assert s["counts"] == {0: 1, 1: 1, 2: 1, 3: 1}
+    assert s["official_ratio"] == 0.5  # 官方+学术 / 总数
+
+
 def test_generate_injects_plan_into_researcher_task(tmp_path, monkeypatch):
     """回归：Researcher 首轮任务必须带规划前缀；轨迹 meta 记录 plan。"""
     from agent import orchestrator as orch

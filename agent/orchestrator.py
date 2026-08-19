@@ -54,6 +54,8 @@ QA_INSTRUCTIONS = (
     "检索纪律：优先用 search_knowledge / query_filings 核对；"
     "实时搜索工具（search_proxy_serper_news / search_proxy_tavily_search 等）**最多调用 2 次**，"
     "仅当报告里的实时新闻类论断无法用知识库核对时才使用，禁止逐条数字重搜。\n"
+    "来源分级：官方（SEC/公司公告）与学术来源优先；同一论断多来源冲突时以官方/学术为准，"
+    "并可在 issues 中提示来源等级差异。\n"
     "收敛约束：**必须在 4 步内完成校验并调用 final_answer**——先整体扫描报告，"
     "用 1~2 次检索批量核对疑点，不要对每个数字单独搜索；未调用 final_answer 不结束。\n"
     "最终必须调用 final_answer 并直接传入 dict（不要输出任何文字说明），例如：\n"
@@ -243,12 +245,15 @@ class ReportPipeline:
             f"宁可写短也要带来源；"
             f"9) 数字级引用纪律（对标 Deep Research 样本）：**每个精确数字（金额/百分比/增速/单价）后"
             f"紧跟 [来源](url)**，来源与数字在同一句或同一行（如 `182 亿美元[来源](https://…)`）；"
-            f"不带紧邻来源的精确数字不允许出现——检索不到就删掉该数字或用定性表述。"
+            f"不带紧邻来源的精确数字不允许出现——检索不到就删掉该数字或用定性表述；"
+            f"10) 来源分级纪律（差距收敛第 3 项）：优先引用官方披露（SEC/公司公告）与学术来源，"
+            f"主流媒体用于补充语境，聚合站（Google News 等）尽量不直接引用；"
+            f"同一论断多来源冲突时，以官方/学术来源为准。"
         )
         if template.get("cite_format"):
-            extra += f"10) {template['cite_format']}。"
+            extra += f"11) {template['cite_format']}。"
         if template.get("safety"):
-            extra += f"11) {template['safety']}"
+            extra += f"12) {template['safety']}"
         mcp_tools = self._get_mcp_tools()
         base_tools = [search_knowledge, parallel_search, query_filings, search_arxiv, search_semantic_scholar, search_graph, search_pubmed]
         base_tools += mcp_tools
@@ -389,7 +394,8 @@ class ReportPipeline:
         out_path.write_text(draft, encoding="utf-8")
 
         # 证据包落地（差距收敛第 1 项）：报告 URL 必须来自检索结果（grounding）
-        from agent.evidence import check_url_grounding
+        # 来源分级（差距收敛第 3 项）：官方/学术来源占比
+        from agent.evidence import check_url_grounding, report_source_levels
 
         tool_outputs = [
             str(s.get("action_output", ""))
@@ -397,6 +403,7 @@ class ReportPipeline:
             if s.get("action_output")
         ]
         grounding = check_url_grounding(draft, tool_outputs)
+        source_levels = report_source_levels(draft)
 
         # 轨迹落盘：步骤 + 质检 + 预算 + 耗时 + 数字引用分析 + URL 落地率
         trace_path = save_trace(
@@ -417,6 +424,7 @@ class ReportPipeline:
                 "citation_density": citation_density(draft),  # STORM 路线：段落级引用密度
                 "number_citation_rate": number_citation_rate(draft),  # 数字级引用率（Deep Research 对标）
                 "url_grounding": grounding,  # 证据包：URL 落地率（报告 URL 必须来自检索结果）
+                "source_levels": source_levels,  # 来源分级：官方/学术占比（差距收敛第 3 项）
                 "report_path": str(out_path),
             },
         )

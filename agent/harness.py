@@ -65,6 +65,7 @@ def evaluate_one(pipeline, task: dict, output_dir: str | Path | None = None) -> 
     citation_density = meta.get("citation_density", 0.0)
     number_citation_rate = meta.get("number_citation_rate", 0.0)
     url_grounding_rate = (meta.get("url_grounding") or {}).get("rate", 1.0)
+    official_ratio = (meta.get("source_levels") or {}).get("official_ratio", 1.0)
     verdict_passed = bool((meta.get("verdict") or {}).get("passed"))
     # 黄金事实核对（GPT 审查 §4.5 整改）：facts/checkpoints 是否在报告正文命中
     fact_hit, fact_total, ck_hit, ck_total = _check_task_facts(report_text, task)
@@ -92,6 +93,7 @@ def evaluate_one(pipeline, task: dict, output_dir: str | Path | None = None) -> 
         "citation_density": citation_density,
         "number_citation_rate": number_citation_rate,
         "url_grounding_rate": url_grounding_rate,
+        "official_ratio": official_ratio,
         "numbers_total": numbers.get("total_numbers", 0),
         "numbers_without_url": numbers.get("numbers_without_url", 0),
         "steps": len(steps),
@@ -176,6 +178,7 @@ def summarize(results: list[dict]) -> dict:
         "avg_citation_density": round(sum(r["citation_density"] for r in done) / n, 3),
         "avg_number_citation_rate": round(sum(r["number_citation_rate"] for r in done) / n, 3),
         "avg_url_grounding_rate": round(sum(r["url_grounding_rate"] for r in done) / n, 3),
+        "avg_official_ratio": round(sum(r["official_ratio"] for r in done) / n, 3),
         "avg_steps": round(sum(r["steps"] for r in done) / n, 1),
         "avg_tool_calls": round(sum(r["tool_calls"] for r in done) / n, 1),
         "avg_errors": round(sum(r["errors"] for r in done) / n, 2),
@@ -210,6 +213,7 @@ def write_outputs(results: list[dict], summary: dict) -> None:
         f"| **段落引用密度（均值）** | {summary.get('avg_citation_density', 0)} |",
         f"| **数字级引用率（均值）** | {summary.get('avg_number_citation_rate', 0)} |",
         f"| **URL 落地率（均值）** | {summary.get('avg_url_grounding_rate', 0)} |",
+        f"| **官方/学术来源占比（均值）** | {summary.get('avg_official_ratio', 0)} |",
         f"| **平均步骤数** | {summary.get('avg_steps', 0)} |",
         f"| 平均工具调用 | {summary.get('avg_tool_calls', 0)} |",
         f"| 平均错误数 | {summary.get('avg_errors', 0)} |",
