@@ -64,6 +64,7 @@ def evaluate_one(pipeline, task: dict, output_dir: str | Path | None = None) -> 
     uncited_rate = numbers.get("uncited_rate", 1.0)
     citation_density = meta.get("citation_density", 0.0)
     number_citation_rate = meta.get("number_citation_rate", 0.0)
+    url_grounding_rate = (meta.get("url_grounding") or {}).get("rate", 1.0)
     verdict_passed = bool((meta.get("verdict") or {}).get("passed"))
     # 黄金事实核对（GPT 审查 §4.5 整改）：facts/checkpoints 是否在报告正文命中
     fact_hit, fact_total, ck_hit, ck_total = _check_task_facts(report_text, task)
@@ -71,8 +72,13 @@ def evaluate_one(pipeline, task: dict, output_dir: str | Path | None = None) -> 
     ck_hit_rate = round(ck_hit / ck_total, 3) if ck_total else 1.0
     leakage = _has_process_leakage(report_text)
     # 成功率口径（整改后）：质检通过 且 黄金事实命中率≥0.5 且 无过程性泄露
-    # ——不再只凭「质检通过 或 无引用率=0」（原口径未验证任务事实）
-    success = verdict_passed and fact_hit_rate >= 0.5 and not leakage
+    # 且 URL 落地率≥0.8（证据包：报告 URL 必须来自检索结果，差距收敛第 1 项）
+    success = (
+        verdict_passed
+        and fact_hit_rate >= 0.5
+        and not leakage
+        and url_grounding_rate >= 0.8
+    )
 
     return {
         "id": task["id"],
@@ -85,6 +91,7 @@ def evaluate_one(pipeline, task: dict, output_dir: str | Path | None = None) -> 
         "uncited_rate": uncited_rate,
         "citation_density": citation_density,
         "number_citation_rate": number_citation_rate,
+        "url_grounding_rate": url_grounding_rate,
         "numbers_total": numbers.get("total_numbers", 0),
         "numbers_without_url": numbers.get("numbers_without_url", 0),
         "steps": len(steps),
@@ -168,6 +175,7 @@ def summarize(results: list[dict]) -> dict:
         "avg_uncited_rate": round(sum(r["uncited_rate"] for r in done) / n, 3),
         "avg_citation_density": round(sum(r["citation_density"] for r in done) / n, 3),
         "avg_number_citation_rate": round(sum(r["number_citation_rate"] for r in done) / n, 3),
+        "avg_url_grounding_rate": round(sum(r["url_grounding_rate"] for r in done) / n, 3),
         "avg_steps": round(sum(r["steps"] for r in done) / n, 1),
         "avg_tool_calls": round(sum(r["tool_calls"] for r in done) / n, 1),
         "avg_errors": round(sum(r["errors"] for r in done) / n, 2),
@@ -201,6 +209,7 @@ def write_outputs(results: list[dict], summary: dict) -> None:
         f"| **无引用数字率（均值）** | {summary.get('avg_uncited_rate', 0)} |",
         f"| **段落引用密度（均值）** | {summary.get('avg_citation_density', 0)} |",
         f"| **数字级引用率（均值）** | {summary.get('avg_number_citation_rate', 0)} |",
+        f"| **URL 落地率（均值）** | {summary.get('avg_url_grounding_rate', 0)} |",
         f"| **平均步骤数** | {summary.get('avg_steps', 0)} |",
         f"| 平均工具调用 | {summary.get('avg_tool_calls', 0)} |",
         f"| 平均错误数 | {summary.get('avg_errors', 0)} |",
@@ -209,20 +218,20 @@ def write_outputs(results: list[dict], summary: dict) -> None:
         "",
         "## 逐任务",
         "",
-        "| id | 状态 | 成功 | 事实命中 | 检查点 | 泄露 | 无引用率 | 引用密度 | 数字引用率 | 步数 | 工具调用 | 错误 | 耗时s | 缺工具 |",
-        "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
+        "| id | 状态 | 成功 | 事实命中 | 检查点 | 泄露 | 无引用率 | 引用密度 | 数字引用率 | URL落地 | 步数 | 工具调用 | 错误 | 耗时s | 缺工具 |",
+        "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
     ]
     for r in results:
         if r["status"] == "done":
             lines.append(
                 f"| {r['id']} | done | {r['success']} | {r['fact_hit_rate']} | {r['checkpoint_hit_rate']} "
                 f"| {r['leakage']} | {r['uncited_rate']} | {r['citation_density']} | {r['number_citation_rate']} "
-                f"| {r['steps']} | {r['tool_calls']} | {r['errors']} | {r['duration_s']} | "
-                f"{','.join(r['required_tools_missing']) or '-'} |"
+                f"| {r['url_grounding_rate']} | {r['steps']} | {r['tool_calls']} | {r['errors']} | {r['duration_s']} "
+                f"| {','.join(r['required_tools_missing']) or '-'} |"
             )
         else:
             lines.append(
-                f"| {r['id']} | error | - | - | - | - | - | - | - | - | - | - | - | {r.get('error', '')[:40]} |"
+                f"| {r['id']} | error | - | - | - | - | - | - | - | - | - | - | - | - | {r.get('error', '')[:40]} |"
             )
     METRICS_PATH.write_text("\n".join(lines), encoding="utf-8")
 

@@ -551,10 +551,33 @@ def test_deterministic_gate_rejects_low_citation():
     assert "54%" in md  # 正文仍交付
 
 
+def test_deterministic_gate_rejects_low_url_grounding():
+    """证据包门禁：URL 落地率低于阈值时拒交/横幅（报告 URL 必须来自检索结果）。"""
+    m = pytest.MonkeyPatch()
+    m.setattr(settings, "QA_POLICY", "reject")
+    m.setattr(settings, "MIN_URL_GROUNDING_RATE", 0.8)
+    result = {
+        "report": "# 正文",
+        "verdict": {"passed": True, "issues": []},
+        "deterministic_gate": {
+            "ok": False,
+            "rate": 0.9,
+            "url_grounding_rate": 0.5,
+            "ungrounded_urls": ["https://evil.example.com/fake"],
+        },
+    }
+    assert _apply_qa_policy(result) == ""  # reject：拒交
+
+    m.setattr(settings, "QA_POLICY", "caveat")
+    md = _apply_qa_policy(result)
+    assert "确定性门禁未通过" in md
+    assert "evil.example.com" in md  # 疑似编造 URL 展示在横幅
+
+
 def test_deterministic_gate_passed_ok():
     result = {
         "report": "# 正文",
         "verdict": {"passed": True, "issues": []},
-        "deterministic_gate": {"ok": True, "rate": 0.9},
+        "deterministic_gate": {"ok": True, "rate": 0.9, "url_grounding_rate": 0.95},
     }
     assert _apply_qa_policy(result) == "# 正文"  # 门禁通过 + 质检通过 → 原样交付

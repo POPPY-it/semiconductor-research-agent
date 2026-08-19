@@ -129,6 +129,35 @@ def test_harness_fact_check_and_success_definition():
     assert not _has_process_leakage("# 周报\n\n正文内容[来源](https://a.com)")
 
 
+def test_url_grounding_detects_fabricated_urls():
+    """差距收敛第 1 项：报告 URL 必须来自检索结果，编造 URL 被确定性检出。"""
+    from agent.evidence import check_url_grounding, extract_urls_with_context
+
+    tool_outputs = [
+        "台积电7月营收 4,675.8 亿新台币 (来源: https://www.sec.gov/archives/tsm.htm)",
+        '{"news": [{"title": "存储涨价", "url": "https://www.ithome.com/0/989/912.htm"}]}',
+    ]
+    urls = extract_urls_with_context(tool_outputs[0])
+    assert urls[0]["url"] == "https://www.sec.gov/archives/tsm.htm"
+    assert urls[0]["snippet"]  # 上下文片段非空
+
+    grounded_report = (
+        "营收 4,675.8 亿[来源](https://www.sec.gov/archives/tsm.htm)，"
+        "存储涨价[来源](https://www.ithome.com/0/989/912.htm)"
+    )
+    r = check_url_grounding(grounded_report, tool_outputs)
+    assert r["rate"] == 1.0 and r["ungrounded"] == []
+
+    # 编造 URL：不在任何工具返回中
+    fake_report = "编造来源[来源](https://evil.example.com/fake)"
+    r2 = check_url_grounding(fake_report, tool_outputs)
+    assert r2["rate"] == 0.0
+    assert "https://evil.example.com/fake" in r2["ungrounded"]
+
+    # 空报告视为全落地（无 URL 可查）
+    assert check_url_grounding("无链接正文", tool_outputs)["rate"] == 1.0
+
+
 def test_generate_injects_plan_into_researcher_task(tmp_path, monkeypatch):
     """回归：Researcher 首轮任务必须带规划前缀；轨迹 meta 记录 plan。"""
     from agent import orchestrator as orch

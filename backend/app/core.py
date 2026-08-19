@@ -30,6 +30,9 @@ class Settings:
     # 是否有来源链接）低于该阈值时门禁不通过——与 LLM 质检独立叠加，不依赖提示词约束。
     # 低于阈值且 QA_POLICY=reject 时拒交；caveat 时横幅注明门禁未通过。
     MIN_NUMBER_CITATION_RATE: float = float(os.getenv("MIN_NUMBER_CITATION_RATE", "0.3"))
+    # 证据包门禁（差距收敛第 1 项）：报告 URL 必须来自检索结果（URL 落地率），
+    # 低于该阈值视为模型编造 URL——确定性检出，与 LLM 质检独立。
+    MIN_URL_GROUNDING_RATE: float = float(os.getenv("MIN_URL_GROUNDING_RATE", "0.8"))
     # 单任务 token 预算（估算字符数）：超预算熔断。
     # 真实负载校准（W8 实测）：日报含 2 轮修订约消耗 110~160 万字符 → 默认 400 万留余量。
     # 接入实时搜索工具后（2026-08-17 实测）：研究+质检一轮约消耗 390~400 万字符

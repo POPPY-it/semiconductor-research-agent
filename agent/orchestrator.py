@@ -387,7 +387,17 @@ class ReportPipeline:
             draft = draft.rstrip() + "\n\n---\n\n> **免责声明**：" + template["disclaimer"] + "\n"
         out_path.write_text(draft, encoding="utf-8")
 
-        # 轨迹落盘：步骤 + 质检 + 预算 + 耗时 + 数字引用分析
+        # 证据包落地（差距收敛第 1 项）：报告 URL 必须来自检索结果（grounding）
+        from agent.evidence import check_url_grounding
+
+        tool_outputs = [
+            str(s.get("action_output", ""))
+            for s in all_steps
+            if s.get("action_output")
+        ]
+        grounding = check_url_grounding(draft, tool_outputs)
+
+        # 轨迹落盘：步骤 + 质检 + 预算 + 耗时 + 数字引用分析 + URL 落地率
         trace_path = save_trace(
             settings.TRACE_DIR,
             run_id,
@@ -405,6 +415,7 @@ class ReportPipeline:
                 "numbers": analyze_numbers(draft),
                 "citation_density": citation_density(draft),  # STORM 路线：段落级引用密度
                 "number_citation_rate": number_citation_rate(draft),  # 数字级引用率（Deep Research 对标）
+                "url_grounding": grounding,  # 证据包：URL 落地率（报告 URL 必须来自检索结果）
                 "report_path": str(out_path),
             },
         )
@@ -416,6 +427,7 @@ class ReportPipeline:
             "revision_rounds": rounds,
             "model_used": ("fallback" if used_fallback[0] else "primary"),
             "budget_used_chars": primary.used_chars,
+            "url_grounding": grounding,
             "trace_path": str(trace_path),
         }
 

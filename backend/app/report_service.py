@@ -41,8 +41,14 @@ def _apply_qa_policy(result: dict) -> str:
     issues = list(verdict.get("issues", []) or [])
     if not gate["ok"]:
         issues.append(
-            f"确定性门禁未通过：数字级引用率 {gate['rate']:.0%} 低于阈值 "
-            f"{settings.MIN_NUMBER_CITATION_RATE:.0%}"
+            f"确定性门禁未通过：数字级引用率 {gate['rate']:.0%}（阈值 "
+            f"{settings.MIN_NUMBER_CITATION_RATE:.0%}），URL 落地率 "
+            f"{gate.get('url_grounding_rate', 1.0):.0%}（阈值 {settings.MIN_URL_GROUNDING_RATE:.0%}）"
+            + (
+                f"，疑似编造 URL：{', '.join(gate.get('ungrounded_urls', [])[:2])}"
+                if gate.get("ungrounded_urls")
+                else ""
+            )
         )
     passed = bool(verdict.get("passed")) and gate["ok"]
     if passed:
@@ -88,13 +94,21 @@ class ReportService:
                 self.bus.publish(session_id, {"type": "phase", "data": {"phase": "research", "msg": "研究 Agent 撰写中..."}})
                 result = pipeline.generate(topic, report_type=report_type)
             verdict = result.get("verdict") or {"passed": False, "issues": []}
-            # 确定性数字引用门禁（GPT 审查 §4.3）：与 LLM 质检独立
+            # 确定性双门禁（与 LLM 质检独立）：
+            # 1) 数字引用率（GPT 审查 §4.3）；2) URL 落地率——报告 URL 必须来自检索结果
             from agent.traces import number_citation_rate
 
             gate_rate = number_citation_rate(result.get("report", ""))
+            grounding = result.get("url_grounding") or {"rate": 1.0, "ungrounded": []}
+            gate_ok = (
+                gate_rate >= settings.MIN_NUMBER_CITATION_RATE
+                and grounding.get("rate", 1.0) >= settings.MIN_URL_GROUNDING_RATE
+            )
             result["deterministic_gate"] = {
-                "ok": gate_rate >= settings.MIN_NUMBER_CITATION_RATE,
+                "ok": gate_ok,
                 "rate": gate_rate,
+                "url_grounding_rate": grounding.get("rate", 1.0),
+                "ungrounded_urls": grounding.get("ungrounded", []),
             }
             self.bus.publish(
                 session_id,
@@ -104,8 +118,9 @@ class ReportService:
                         "phase": "qa_done",
                         "msg": (
                             f"质检完成：passed={verdict.get('passed')}，"
-                            f"确定性门禁={'通过' if result['deterministic_gate']['ok'] else '未通过'}"
-                            f"（数字引用率 {result['deterministic_gate']['rate']:.0%}），"
+                            f"确定性门禁={'通过' if gate_ok else '未通过'}"
+                            f"（数字引用率 {gate_rate:.0%}，"
+                            f"URL落地率 {grounding.get('rate', 1.0):.0%}），"
                             f"修订 {result.get('revision_rounds', 0)} 轮，"
                             f"模型={result.get('model_used', 'primary')}，"
                             f"预算用量={result.get('budget_used_chars', 0)} 字符"
