@@ -32,6 +32,13 @@ TOOL_META: dict[str, dict] = {
         "source": "本地知识库（新闻与财报全文）",
         "degrade": "本地工具，不涉及外部 API",
     },
+    "parallel_search": {
+        "required": ["queries"],
+        "range": {"limit": (1, 5), "queries_len": (2, 6)},
+        "timeout_s": None,
+        "source": "本地知识库（多查询并发，差距收敛第 2 项）",
+        "degrade": "本地工具；单条查询失败返回该条错误，不阻塞整体",
+    },
     "query_filings": {
         "required": ["company"],
         "range": {"limit": (1, 10)},
@@ -192,6 +199,54 @@ def make_tools(retriever, store) -> list:
                 f"[相关度 {score:.2f}] {doc.text[:240]}... (来源: {doc.meta.get('url', '')})"
             )
         return "\n---\n".join(lines) or "（无结果）"
+
+    @tool
+    def parallel_search(queries: str, limit: int = 3) -> str:
+        """并发检索知识库：一次提交 2~6 条查询，并行执行混合检索+精排并合并返回。
+
+        用于分节写作前批量取材（差距收敛第 2 项：多路查询并发，墙钟时间减半）。
+        注意：reranker 为 CPU 推理，并发收益取决于核数；单条查询失败不影响其他条。
+
+        Args:
+            queries: JSON 字符串数组，如 ["存储芯片 涨价 2026", "HBM 产能 供需"]（2~6 条）。
+            limit: 每条查询返回条数，默认 3，范围 1~5。
+        """
+        ok, lim = _check_range("limit", limit, 1, 5, 3)
+        if not ok:
+            return lim
+        try:
+            qs = json.loads(queries)
+        except (json.JSONDecodeError, TypeError):
+            return (
+                "参数错误：queries 必须是合法 JSON 字符串数组，"
+                '如 ["存储芯片 涨价", "HBM 产能"]'
+            )
+        if not isinstance(qs, list):
+            return "参数错误：queries 必须是 JSON 数组"
+        qs = [str(q).strip() for q in qs if str(q).strip()]
+        if not (2 <= len(qs) <= 6):
+            return "参数错误：queries 需为 2~6 条非空查询的 JSON 数组"
+
+        import concurrent.futures as _cf
+
+        def _one(q: str) -> str:
+            try:
+                hits = retriever.search_reranked(q, top_k=lim)
+            except Exception as e:  # noqa: BLE001 —— 单条失败不阻塞整体
+                return f"（查询「{q}」失败：{e}）"
+            lines = []
+            for doc_id, score in hits:
+                doc = retriever.documents[doc_id]
+                lines.append(
+                    f"[相关度 {score:.2f}] {doc.text[:200]}... (来源: {doc.meta.get('url', '')})"
+                )
+            return "\n".join(lines) or "（无结果）"
+
+        with _cf.ThreadPoolExecutor(max_workers=min(4, len(qs))) as ex:
+            results = list(ex.map(_one, qs))
+        return "\n\n".join(
+            f"## 查询「{q}」\n{r}" for q, r in zip(qs, results)
+        )
 
     @tool
     def query_filings(company: str, limit: int = 3) -> str:
@@ -419,6 +474,7 @@ def make_tools(retriever, store) -> list:
 
     return [
         search_knowledge,
+        parallel_search,
         query_filings,
         search_arxiv,
         search_semantic_scholar,

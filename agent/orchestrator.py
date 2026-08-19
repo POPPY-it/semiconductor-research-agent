@@ -226,7 +226,7 @@ class ReportPipeline:
         return make_tools(self.retriever, self.store)
 
     def _build_agents(self, model, report_type: str = "weekly"):
-        search_knowledge, query_filings, search_arxiv, search_semantic_scholar, generate_chart, search_graph, search_pubmed = self._make_tools()
+        search_knowledge, parallel_search, query_filings, search_arxiv, search_semantic_scholar, generate_chart, search_graph, search_pubmed = self._make_tools()
         template = REPORT_TEMPLATES.get(report_type, REPORT_TEMPLATES["weekly"])
         extra = (
             f"4) 按「{template['sections']}」分节；"
@@ -250,7 +250,7 @@ class ReportPipeline:
         if template.get("safety"):
             extra += f"11) {template['safety']}"
         mcp_tools = self._get_mcp_tools()
-        base_tools = [search_knowledge, query_filings, search_arxiv, search_semantic_scholar, search_graph, search_pubmed]
+        base_tools = [search_knowledge, parallel_search, query_filings, search_arxiv, search_semantic_scholar, search_graph, search_pubmed]
         base_tools += mcp_tools
         researcher = CodeAgent(
             tools=base_tools + [generate_chart],
@@ -344,7 +344,8 @@ class ReportPipeline:
                 + f"本节推荐检索词：{' / '.join(sec.get('search_queries') or [])}\n"
                 + "要求：\n"
                 + "1) **只撰写这一节**，输出本节 Markdown（以 ## 开头），不要输出其他节；\n"
-                + "2) 先用 search_knowledge / query_filings（或推荐检索词）检索，再写作；\n"
+                + "2) 先用 search_knowledge / query_filings（或推荐检索词）检索，再写作；"
+                + "**若本节有多路查询需求，优先用 parallel_search 一次并发检索**；\n"
                 + "3) **每个段落结尾必须带 [来源](url)**；**每个精确数字后紧跟 [来源](url)**；\n"
                 + "4) 精确财务数字必须来自 SEC 语料并附来源链接；检索不到就写「当前语料未覆盖」或定性表述，禁止编造；\n"
                 + f"5) 本节正文 300~600 字（整篇目标 {template.get('min_words', 400)} 字按节分配）。"
@@ -436,7 +437,7 @@ class ReportPipeline:
 
         问答预算为任务预算的 1/10，独立熔断；history 提供最近几轮 Q/A 用于指代消解。
         """
-        search_knowledge, query_filings, search_arxiv, search_semantic_scholar, _generate_chart, search_graph, search_pubmed = self._make_tools()
+        search_knowledge, _parallel_search, query_filings, search_arxiv, search_semantic_scholar, _generate_chart, search_graph, search_pubmed = self._make_tools()
         model = BudgetedModel(
             build_model(), budget_chars=max(100_000, settings.TOKEN_BUDGET_CHARS // 10)
         )

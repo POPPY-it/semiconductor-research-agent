@@ -62,6 +62,7 @@ def test_tool_meta_matches_make_tools():
     # 顺序稳定：检索类在前，出图在后（兼容既有调用方解包）
     assert names == [
         "search_knowledge",
+        "parallel_search",
         "query_filings",
         "search_arxiv",
         "search_semantic_scholar",
@@ -76,6 +77,37 @@ def test_tool_meta_matches_make_tools():
     # 外部 API 工具声明了超时
     for ext in ("search_arxiv", "search_semantic_scholar", "search_pubmed"):
         assert TOOL_META[ext]["timeout_s"] > 0
+
+
+def test_parallel_search_runs_concurrently_and_validates():
+    """差距收敛第 2 项：parallel_search 并发多查询、参数校验、单条失败不阻塞。"""
+    from agent.tools import make_tools
+
+    calls: list[str] = []
+
+    class R:
+        documents = {
+            "台": type("D", (), {"text": "台积电 2nm 产能 CoWoS", "meta": {"url": "https://a.com"}})(),
+            "H": type("D", (), {"text": "HBM 供需 存储涨价", "meta": {"url": "https://b.com"}})(),
+        }
+
+        def search_reranked(self, q, top_k=5):
+            calls.append(q)
+            return [(q[:1], 0.9)]  # doc_id 取查询首字（台/H）
+
+    tools = {t.name: t for t in make_tools(R(), _FakeStore())}
+    ps = tools["parallel_search"]
+
+    out = ps(queries='["台积电 2nm", "HBM 供需"]', limit=2)
+    assert "## 查询「台积电 2nm」" in out
+    assert "## 查询「HBM 供需」" in out
+    assert len(calls) == 2  # 两条查询都执行
+
+    # 参数校验
+    assert "参数错误" in ps(queries="not json")
+    assert "参数错误" in ps(queries='["只有一条"]')
+    assert "参数错误" in ps(queries="[]")
+    assert "limit 需在 1~5 之间" in ps(queries='["a", "b"]', limit=9)
 
 
 # ---------- 2. 外部 API：超时/退避/降级 ----------
