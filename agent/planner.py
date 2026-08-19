@@ -134,3 +134,35 @@ def format_plan(plan: dict, topic: str) -> str:
         "2. **禁止出现无来源的精确数字**——检索不到就写定性表述或明确说明数据缺失。",
     ]
     return "\n".join(lines)
+
+
+def _rule_sections(template: dict | None) -> list[dict]:
+    """规则模板的章节结构（title/focus/queries），供分节执行使用。"""
+    template = template or {}
+    titles = [s.strip() for s in str(template.get("sections", "")).split("/") if s.strip()]
+    if not titles:
+        titles = ["概述", "关键动态", "数据透视", "展望"]
+    sections = []
+    for t in titles:
+        if "财务" in t or "业绩" in t or "营收" in t or "数据" in t or "资产负债表" in t:
+            queries = ["{公司} 财报 营收 毛利率", "SEC 财报 披露"]
+        elif "概况" in t or "背景" in t or "竞争力" in t or "护城河" in t or "风险" in t:
+            queries = ["{公司} 竞争力 行业地位", "半导体 产业链"]
+        elif "展望" in t or "趋势" in t or "开放问题" in t:
+            queries = ["半导体 展望 趋势 2026", "行业 预测"]
+        else:
+            queries = ["半导体 行业动态", "半导体 新闻"]
+        sections.append({"title": t, "focus": "", "search_queries": queries})
+    return sections
+
+
+def build_plan_structured(topic: str, template: dict | None, model) -> tuple[str, list[dict]]:
+    """规划 + 结构化章节（分节独立 run 用）。
+
+    返回 (plan_text, sections)；sections = [{"title", "focus", "search_queries"}]。
+    优先 LLM 多视角大纲（失败回落规则模板）。
+    """
+    llm_plan = build_plan_llm(topic, template, model)
+    if llm_plan:
+        return format_plan(llm_plan, topic), llm_plan["sections"]
+    return build_plan(topic, template), _rule_sections(template)

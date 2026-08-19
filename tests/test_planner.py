@@ -160,10 +160,12 @@ def test_generate_injects_plan_into_researcher_task(tmp_path, monkeypatch):
     pipe = orch.ReportPipeline(FakeRetriever(), FakeStore())
     result = pipe.generate("台积电基本面", report_type="basic_research")
 
+    # 分节独立 run：researcher 被调 N 次（basic_research 模板=6 节），每节任务独立
     first_task = calls["tasks"][0]
+    assert "第 1/6 节" in first_task
     assert "撰写规划" in first_task
-    assert "两条硬约束" in first_task
     assert "禁止出现无来源的精确数字" in first_task
+    assert any("第 2/6 节" in t for t in calls["tasks"])
     # 轨迹 meta 记录 plan（P1-3 可回放）
     import json
 

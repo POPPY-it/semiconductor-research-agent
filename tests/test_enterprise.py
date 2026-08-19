@@ -382,8 +382,10 @@ def test_fallback_switch_uses_new_agent(tmp_path, monkeypatch):
 
     pipe = orch.ReportPipeline(FakeRetriever(), FakeStore())
     result = pipe.generate("测试选题")
-    # 第一次用主模型失败 → 切换后第二次必须用备用模型的新 Agent
-    assert calls["researcher_runs"] == ["primary", "fallback"]
+    # 分节独立 run：第 1 节（weekly=4 节）主模型失败 → 切换后重试该节 + 后续节都用备用模型
+    assert calls["researcher_runs"][0] == "primary"
+    assert len(calls["researcher_runs"]) == 5  # 节1失败重试 + 4 节
+    assert all(tag == "fallback" for tag in calls["researcher_runs"][1:])
     assert result["model_used"] == "fallback"
     # 轨迹已落盘（P0-2）
     trace_files = list((tmp_path / "traces").glob("*.jsonl"))

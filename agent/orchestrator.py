@@ -54,6 +54,8 @@ QA_INSTRUCTIONS = (
     "检索纪律：优先用 search_knowledge / query_filings 核对；"
     "实时搜索工具（search_proxy_serper_news / search_proxy_tavily_search 等）**最多调用 2 次**，"
     "仅当报告里的实时新闻类论断无法用知识库核对时才使用，禁止逐条数字重搜。\n"
+    "收敛约束：**必须在 4 步内完成校验并调用 final_answer**——先整体扫描报告，"
+    "用 1~2 次检索批量核对疑点，不要对每个数字单独搜索；未调用 final_answer 不结束。\n"
     "最终必须调用 final_answer 并直接传入 dict（不要输出任何文字说明），例如：\n"
     "final_answer({\"passed\": true, \"issues\": [\"问题1\",\"问题2\"]})"
 )
@@ -263,7 +265,6 @@ class ReportPipeline:
             instructions=QA_INSTRUCTIONS,
         )
         return researcher, qa
-
     def generate(
         self, topic: str, output_dir: str | Path | None = None, report_type: str = "weekly"
     ) -> dict:
@@ -326,24 +327,38 @@ class ReportPipeline:
                 )
         except Exception:  # noqa: BLE001
             pass
-        # P1-3 + STORM 路线：显式规划——优先 LLM 多视角大纲（一次调用），失败回落规则模板
-        from agent.planner import build_plan, build_plan_llm, format_plan
+        # P1-3 + STORM 路线：规划（LLM 多视角大纲，失败回落规则模板）→ 分节独立 run
+        from agent.planner import build_plan_structured
 
         template = REPORT_TEMPLATES.get(report_type, {})
-        plan = build_plan(topic, template)  # 规则版兜底
-        try:
-            llm_plan = build_plan_llm(topic, template, build_model())
-            if llm_plan:
-                plan = format_plan(llm_plan, topic)
-        except Exception:  # noqa: BLE001 —— 规划失败不阻塞
-            pass
-        draft = guarded_run("researcher", mem_ctx + plan + "\n\n" + f"撰写研报：{topic}")
+        plan, sections = build_plan_structured(topic, template, build_model())
+        n_sec = len(sections)
+        section_texts: list[str] = []
+        for idx, sec in enumerate(sections, 1):
+            sec_task = (
+                mem_ctx
+                + plan
+                + "\n\n"
+                + f"撰写研报第 {idx}/{n_sec} 节「{sec['title']}」。\n"
+                + f"本节焦点：{sec.get('focus') or '按节题撰写'}\n"
+                + f"本节推荐检索词：{' / '.join(sec.get('search_queries') or [])}\n"
+                + "要求：\n"
+                + "1) **只撰写这一节**，输出本节 Markdown（以 ## 开头），不要输出其他节；\n"
+                + "2) 先用 search_knowledge / query_filings（或推荐检索词）检索，再写作；\n"
+                + "3) **每个段落结尾必须带 [来源](url)**；**每个精确数字后紧跟 [来源](url)**；\n"
+                + "4) 精确财务数字必须来自 SEC 语料并附来源链接；检索不到就写「当前语料未覆盖」或定性表述，禁止编造；\n"
+                + f"5) 本节正文 300~600 字（整篇目标 {template.get('min_words', 400)} 字按节分配）。"
+            )
+            section_texts.append(str(guarded_run("researcher", sec_task, reset=True)))
+        draft = "\n\n".join(section_texts)
+
         verdict: dict | None = None
         rounds = 0
         for rounds in range(1, 3):  # 质检不过最多修订 2 轮
             verdict = None
             for _attempt in range(3):  # 解析失败重试（最多 3 次，容忍模型偶发输出不规范）
-                verdict = _extract_json(guarded_run("qa", f"请校验以下报告：\n\n{draft}", reset=False))
+                # reset=True：任务自带全文，避免多次重试在 memory 里累积全文
+                verdict = _extract_json(guarded_run("qa", f"请校验以下报告：\n\n{draft}", reset=True))
                 if verdict is not None:
                     break
             if verdict is None:
@@ -352,12 +367,13 @@ class ReportPipeline:
                 break
             draft = guarded_run(
                 "researcher",
+                f"以下是初稿全文：\n\n{draft}\n\n"
                 f"质检反馈的问题：{json.dumps(verdict.get('issues', []), ensure_ascii=False)}。"
                 "请**只修订与上述问题直接相关的段落**（修正数字、补充来源链接、删除无法验证的论断），"
                 "其余内容保持原样；最后输出修订后的完整 Markdown 报告。"
                 "**输出纪律：直接输出报告正文本身（从 # 标题开始），"
                 "禁止输出研究过程、验证清单、'Based on…'、'以下是修订…' 等任何过程性文字。**",
-                reset=False,
+                reset=True,
             )
 
         out_dir = Path(output_dir) if output_dir else ROOT / "reports" / "output"
