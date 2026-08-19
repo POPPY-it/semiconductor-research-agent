@@ -64,7 +64,7 @@ SEC EDGAR 财报（32 篇全文）、arXiv 论文（49 篇）、PubMed 生物医
 - 检索指标：Recall@k / MRR / Precision（`agent/eval.py`，CI 回归用 mini 语料）
 - LLM-judge：faithfulness / answer_relevance
 - 方法论反思：见 `docs/p3-eval-report.md`
-- **Agent 级评测（成功率 / 无引用数字率 / 步数 / 成本）**：24 条任务集（`eval/tasks.json`，含研投基本面 t21~t24）+ `agent/harness.py`；合并指标见 `eval/metrics.md`（成功率 0.652 / 无引用率 0.577，2026-08-17）
+- **Agent 级评测（成功率 / 黄金事实命中 / 引用 / 步数 / 成本）**：24 条任务集（`eval/tasks.json`，含研投基本面 t21~t24）+ `agent/harness.py`；合并指标见 `eval/metrics.md`（2026-08-17；成功率口径 = 质检通过 + 黄金事实命中率≥0.5 + 无过程性泄露，GPT 审查 §4.5 整改）
 - 工具治理测试：超时降级 / 退避重试 / 参数校验文案 / MCP 独立 Tool / 检索统一（`tests/test_tools_governance.py`，P1-2）
 
 ## 工具治理（P1-2）
@@ -96,6 +96,6 @@ cd frontend; npm install --registry=https://registry.npmmirror.com; npm run buil
 
 ## 进度与对齐说明
 
-- 博客系列 6 篇已发布（掘金）；测试 43 个全绿；CI 三流水线（pytest + 前端构建 + Docker 构建）
+- 博客系列 7 篇草稿/已发布（掘金）；测试 **80 个全绿**；CI 三流水线（pytest + 前端构建 + Docker 构建）
 - `docs/企业认可改法.md`：第三方审阅整改建议（已修复：fallback 切换、记忆向量错位、JSON 解析；P0-1 口径统一见本 README）
 - `PLAN.md` 为原始施工图，架构以本 README 为准

@@ -531,3 +531,30 @@ def test_qa_policy_passed_untouched():
     m.setattr(settings, "QA_POLICY", "reject")
     result = {"report": "# 正文", "verdict": {"passed": True, "issues": []}}
     assert _apply_qa_policy(result) == "# 正文"
+
+
+def test_deterministic_gate_rejects_low_citation():
+    """GPT 审查 §4.3：数字级引用率低于阈值时，即使 LLM 质检通过也按策略处理。"""
+    m = pytest.MonkeyPatch()
+    m.setattr(settings, "QA_POLICY", "reject")
+    m.setattr(settings, "MIN_NUMBER_CITATION_RATE", 0.3)
+    result = {
+        "report": "毛利率 54% 是一个没有紧邻来源的数字，后面跟很长文字填满窗口。",
+        "verdict": {"passed": True, "issues": []},
+        "deterministic_gate": {"ok": False, "rate": 0.0},
+    }
+    assert _apply_qa_policy(result) == ""  # reject：拒交
+
+    m.setattr(settings, "QA_POLICY", "caveat")
+    md = _apply_qa_policy(result)
+    assert "确定性门禁未通过" in md  # caveat：横幅注明门禁未通过
+    assert "54%" in md  # 正文仍交付
+
+
+def test_deterministic_gate_passed_ok():
+    result = {
+        "report": "# 正文",
+        "verdict": {"passed": True, "issues": []},
+        "deterministic_gate": {"ok": True, "rate": 0.9},
+    }
+    assert _apply_qa_policy(result) == "# 正文"  # 门禁通过 + 质检通过 → 原样交付

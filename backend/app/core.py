@@ -26,6 +26,10 @@ class Settings:
     # ---- 企业级配置（W8 加固）----
     # 质检交付策略：caveat=附警示横幅交付 / reject=不通过则不交付
     QA_POLICY: str = os.getenv("QA_POLICY", "caveat")
+    # 确定性数字引用门禁（GPT 审查 §4.3 整改）：报告的数字级引用率（数字后 80 字符内
+    # 是否有来源链接）低于该阈值时门禁不通过——与 LLM 质检独立叠加，不依赖提示词约束。
+    # 低于阈值且 QA_POLICY=reject 时拒交；caveat 时横幅注明门禁未通过。
+    MIN_NUMBER_CITATION_RATE: float = float(os.getenv("MIN_NUMBER_CITATION_RATE", "0.3"))
     # 单任务 token 预算（估算字符数）：超预算熔断。
     # 真实负载校准（W8 实测）：日报含 2 轮修订约消耗 110~160 万字符 → 默认 400 万留余量。
     # 接入实时搜索工具后（2026-08-17 实测）：研究+质检一轮约消耗 390~400 万字符

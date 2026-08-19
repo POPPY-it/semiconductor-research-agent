@@ -226,7 +226,7 @@ export default function SessionDetail({
                 type="error"
                 showIcon
                 message="流水线执行异常"
-                description={events.at(-1)?.msg || "未知执行错误，请检查后端运行状态或重试。"}
+                description={events.length > 0 ? events[events.length - 1]?.msg : "未知执行错误，请检查后端运行状态或重试。"}
                 action={
                   <Button size="small" type="primary" danger icon={<ReloadOutlined />} onClick={onRetry}>
                     重新执行任务

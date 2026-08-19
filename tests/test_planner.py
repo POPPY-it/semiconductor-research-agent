@@ -108,6 +108,27 @@ def test_number_citation_rate_metric():
     assert number_citation_rate("") == 0.0
 
 
+def test_harness_fact_check_and_success_definition():
+    """GPT 审查 §4.5：成功定义必须验证黄金事实，且检测过程性泄露。"""
+    from agent.harness import _check_task_facts, _has_process_leakage
+
+    task = {
+        "facts": ["2026年7月合并营收约4,675.8亿新台币", "同比约+44.7%"],
+        "checkpoints": ["报告给出台积电最近月度营收的精确金额"],
+    }
+    good_report = "台积电7月营收 4,675.8 亿新台币，同比 +44.7% [来源](https://a.com)"
+    fh, ft, ch, ct = _check_task_facts(good_report, task)
+    assert fh == 2 and ft == 2  # 两个黄金事实都命中
+    assert ch >= 1  # checkpoint 关键词命中
+
+    bad_report = "本周行业整体平稳，无具体数据。"
+    fh2, ft2, _, _ = _check_task_facts(bad_report, task)
+    assert fh2 == 0  # 黄金事实全未命中
+
+    assert _has_process_leakage("Based on my extensive research and verification...")
+    assert not _has_process_leakage("# 周报\n\n正文内容[来源](https://a.com)")
+
+
 def test_generate_injects_plan_into_researcher_task(tmp_path, monkeypatch):
     """回归：Researcher 首轮任务必须带规划前缀；轨迹 meta 记录 plan。"""
     from agent import orchestrator as orch
@@ -158,7 +179,8 @@ def test_generate_injects_plan_into_researcher_task(tmp_path, monkeypatch):
     monkeypatch.setattr(orch.ReportPipeline, "_get_mcp_tools", lambda self: [])
 
     pipe = orch.ReportPipeline(FakeRetriever(), FakeStore())
-    result = pipe.generate("台积电基本面", report_type="basic_research")
+    # GPT 审查 §4.21：测试输出必须走 tmp_path，禁止污染正式报告产物目录
+    result = pipe.generate("台积电基本面", report_type="basic_research", output_dir=tmp_path / "reports")
 
     # 分节独立 run：researcher 被调 N 次（basic_research 模板=6 节），每节任务独立
     first_task = calls["tasks"][0]

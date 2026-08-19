@@ -2,95 +2,49 @@
   "retrieval": {
     "k": 5,
     "n": 8,
-    "recall_mean": 0.127,
-    "mrr_mean": 0.656,
-    "precision_mean": 0.525,
+    "recall_mean": 0.875,
+    "mrr_mean": 0.938,
+    "precision_mean": 0.375,
     "per_case": [
       {
         "question": "台积电 2026 年 7 月营收多少？",
-        "recall": 0.077,
+        "recall": 1.0,
         "mrr": 1.0
       },
       {
         "question": "ASML 2026 年第二季度净销售额和全年指引？",
-        "recall": 0.067,
-        "mrr": 0.25
+        "recall": 1.0,
+        "mrr": 1.0
       },
       {
         "question": "NVIDIA 最近提交了哪些财报？",
-        "recall": 0.083,
+        "recall": 1.0,
         "mrr": 1.0
       },
       {
         "question": "HBM 与哪些技术或公司相关？",
-        "recall": 0.286,
-        "mrr": 1.0
+        "recall": 0.5,
+        "mrr": 0.5
       },
       {
         "question": "存内计算相关的论文有哪些？",
-        "recall": 0.0,
-        "mrr": 0.0
+        "recall": 0.5,
+        "mrr": 1.0
       },
       {
         "question": "RAG 检索增强与什么相关？",
-        "recall": 0.0,
-        "mrr": 0.0
+        "recall": 1.0,
+        "mrr": 1.0
       },
       {
         "question": "Intel 提交了什么财报？",
-        "recall": 0.1,
+        "recall": 1.0,
         "mrr": 1.0
       },
       {
         "question": "先进封装技术有哪些？",
-        "recall": 0.4,
+        "recall": 1.0,
         "mrr": 1.0
-      }
-    ]
-  },
-  "llm_judge": {
-    "faithfulness_mean": 0.15,
-    "answer_relevance_mean": 1.0,
-    "per_case": [
-      {
-        "question": "台积电 2026 年 7 月营收多少？",
-        "faithfulness": 0.0,
-        "relevance": 1.0
-      },
-      {
-        "question": "ASML 2026 年第二季度净销售额和全年指引？",
-        "faithfulness": 0.0,
-        "relevance": 1.0
-      },
-      {
-        "question": "NVIDIA 最近提交了哪些财报？",
-        "faithfulness": 0.0,
-        "relevance": 1.0
-      },
-      {
-        "question": "HBM 与哪些技术或公司相关？",
-        "faithfulness": 0.85,
-        "relevance": 1.0
-      },
-      {
-        "question": "存内计算相关的论文有哪些？",
-        "faithfulness": 0.0,
-        "relevance": 1.0
-      },
-      {
-        "question": "RAG 检索增强与什么相关？",
-        "faithfulness": 0.0,
-        "relevance": 1.0
-      },
-      {
-        "question": "Intel 提交了什么财报？",
-        "faithfulness": 0.0,
-        "relevance": 1.0
-      },
-      {
-        "question": "先进封装技术有哪些？",
-        "faithfulness": 0.35,
-        "relevance": 1.0
       }
     ]
   }

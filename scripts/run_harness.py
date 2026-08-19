@@ -2,9 +2,13 @@
 
 跑 eval/tasks.json 任务集，产出 eval/results_latest.json + eval/metrics.md。
 --limit 取前 N 条；--ids 只跑指定 id 列表（两者同时给时 --ids 优先）。
+
+可重复运行（GPT 审查 §4.4 整改）：向量索引与报告输出都用**隔离临时目录**，
+不污染主知识库索引与正式报告产物；重复执行不会撞 Chroma 固定 doc_id 重复错误。
 """
 import argparse
 import sys
+import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -30,14 +34,18 @@ def main() -> None:
     else:
         print(f"加载任务集：{len(tasks)} 条" + (f"，本次只跑前 {args.limit} 条" if args.limit else ""))
 
-    print("构建知识库索引...")
-    retriever = build_retriever(settings.ARTICLES_DB, settings.VECTOR_DIR, settings.MODEL_DIR)
-    store = SQLiteStore(settings.ARTICLES_DB)
-    try:
-        pipeline = ReportPipeline(retriever, store)
-        run_harness(pipeline, tasks, limit=args.limit)
-    finally:
-        store.close()
+    # 隔离临时向量索引：每次运行全新构建，不写主库 data/vectorstore，可重复执行
+    with tempfile.TemporaryDirectory(prefix="harness_vec_") as vec_dir:
+        print("构建知识库索引（隔离临时目录）...")
+        retriever = build_retriever(
+            settings.ARTICLES_DB, Path(vec_dir), settings.MODEL_DIR, reset=True
+        )
+        store = SQLiteStore(settings.ARTICLES_DB)
+        try:
+            pipeline = ReportPipeline(retriever, store)
+            run_harness(pipeline, tasks, limit=args.limit)
+        finally:
+            store.close()
 
 
 if __name__ == "__main__":
