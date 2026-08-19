@@ -276,6 +276,7 @@ class ReportPipeline:
         run_id = new_run_id()
         t0 = time.time()
         all_steps: list[dict] = []
+        raw_tool_outputs: list[str] = []  # 未截断的工具返回（URL grounding 用，防轨迹截断误判）
         primary = BudgetedModel(build_model(), budget_chars=settings.TOKEN_BUDGET_CHARS)
         fallback_base = build_fallback_model()
         researcher, qa = self._build_agents(primary, report_type)
@@ -298,6 +299,11 @@ class ReportPipeline:
                 for s in collect_agent_steps(agent):
                     s["role"] = role
                     all_steps.append(s)
+                # 收集未截断的工具返回（observations），供 URL grounding 校验
+                for s in getattr(getattr(agent, "memory", None), "steps", None) or []:
+                    obs = getattr(s, "observations", None)
+                    if obs:
+                        raw_tool_outputs.append(str(obs))
             return result
 
         def guarded_run(role: str, task, reset: bool = True):
@@ -408,15 +414,11 @@ class ReportPipeline:
         out_path.write_text(draft, encoding="utf-8")
 
         # 证据包落地（差距收敛第 1 项）：报告 URL 必须来自检索结果（grounding）
+        # 用未截断的工具返回校验（轨迹序列化会截断，防误判）
         # 来源分级（差距收敛第 3 项）：官方/学术来源占比
         from agent.evidence import check_url_grounding, report_source_levels
 
-        tool_outputs = [
-            str(s.get("action_output", ""))
-            for s in all_steps
-            if s.get("action_output")
-        ]
-        grounding = check_url_grounding(draft, tool_outputs)
+        grounding = check_url_grounding(draft, raw_tool_outputs)
         source_levels = report_source_levels(draft)
 
         # 轨迹落盘：步骤 + 质检 + 预算 + 耗时 + 数字引用分析 + URL 落地率

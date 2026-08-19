@@ -25,6 +25,10 @@ def serialize_step(step) -> dict:
     d: dict = {"kind": type(step).__name__}
     if hasattr(step, "step_number"):
         d["step_number"] = getattr(step, "step_number")
+    # TaskStep：任务文本对回放"每步在做什么"关键，单独序列化
+    task = getattr(step, "task", None)
+    if task is not None:
+        d["task"] = str(task)[:500]
     tools = []
     for tc in getattr(step, "tool_calls", None) or []:
         tools.append(
