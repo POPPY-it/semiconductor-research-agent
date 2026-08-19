@@ -234,12 +234,14 @@ def test_generate_injects_plan_into_researcher_task(tmp_path, monkeypatch):
     # GPT 审查 §4.21：测试输出必须走 tmp_path，禁止污染正式报告产物目录
     result = pipe.generate("台积电基本面", report_type="basic_research", output_dir=tmp_path / "reports")
 
-    # 分节独立 run：researcher 被调 N 次（basic_research 模板=6 节），每节任务独立
+    # 分节独立 run：researcher 被调 N 次（basic_research 模板=6 节）+ 反思循环 1 次
     first_task = calls["tasks"][0]
     assert "第 1/6 节" in first_task
     assert "撰写规划" in first_task
     assert "禁止出现无来源的精确数字" in first_task
     assert any("第 2/6 节" in t for t in calls["tasks"])
+    # 反思循环（差距收敛第 4 项）：初稿后有一次证据自检 + 定向补检索
+    assert any("严格质检员的视角反思" in t for t in calls["tasks"])
     # 轨迹 meta 记录 plan（P1-3 可回放）
     import json
 

@@ -358,6 +358,20 @@ class ReportPipeline:
             section_texts.append(str(guarded_run("researcher", sec_task, reset=True)))
         draft = "\n\n".join(section_texts)
 
+        # 反思循环（差距收敛第 4 项，对标 STORM Reflection/Deep Research 自检）：
+        # QA 之前让 Researcher 自检"证据不足的论断"→ 定向补检索 → 修正，减少 QA 被动拦截负担
+        reflect_task = (
+            f"以下是初稿全文：\n\n{draft}\n\n"
+            "请以严格质检员的视角反思这份初稿，找出**证据不足的论断**："
+            "无紧邻来源链接的精确数字、没有来源链接的段落、来源与内容不符的引用。\n"
+            "对每个问题：1) 标注所属小节；2) 用 search_knowledge / parallel_search "
+            "定向补检索（最多 3 次）；3) 修正数字或补充来源，检索不到就删除该论断或改为定性表述。\n"
+            "**只修正证据不足处，其余内容保持原样。**\n"
+            "**输出纪律：直接输出反思修订后的完整 Markdown 报告（从 # 标题开始），"
+            "禁止输出反思过程、验证清单、'Based on…' 等任何过程性文字。**"
+        )
+        draft = str(guarded_run("researcher", reflect_task, reset=True))
+
         verdict: dict | None = None
         rounds = 0
         for rounds in range(1, 3):  # 质检不过最多修订 2 轮
