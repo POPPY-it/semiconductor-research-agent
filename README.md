@@ -64,7 +64,7 @@ SEC EDGAR 财报（32 篇全文）、arXiv 论文（49 篇）、PubMed 生物医
 - 检索指标：Recall@k / MRR / Precision（`agent/eval.py`，CI 回归用 mini 语料）
 - LLM-judge：faithfulness / answer_relevance
 - 方法论反思：见 `docs/p3-eval-report.md`
-- **Agent 级评测（成功率 / 黄金事实命中 / 引用 / 步数 / 成本）**：24 条任务集（`eval/tasks.json`，含研投基本面 t21~t24）+ `agent/harness.py`；合并指标见 `eval/metrics.md`（2026-08-17；成功率口径 = 质检通过 + 黄金事实命中率≥0.5 + 无过程性泄露，GPT 审查 §4.5 整改）
+- **Agent 级评测（成功率 / 黄金事实命中 / 引用 / 步数 / 成本）**：24 条任务集（`eval/tasks.json`，含研投基本面 t21~t24）+ `agent/harness.py`；成功率口径 = 质检通过 + 黄金事实命中率≥0.5 + 无泄露 + URL落地率≥0.8（GPT 审查 §4.5 整改）。⚠️ **`eval/metrics.md` 中的数字为历史基线（跨代码版本拼接），不代表当前版本**——当前代码（分节 run/证据包/三门禁/反思/claim 支持率）的全量重跑未执行，引用指标前需先 `python scripts/run_harness.py` 产出同口径基线
 - 工具治理测试：超时降级 / 退避重试 / 参数校验文案 / MCP 独立 Tool / 检索统一（`tests/test_tools_governance.py`，P1-2）
 
 ## 工具治理（P1-2）
