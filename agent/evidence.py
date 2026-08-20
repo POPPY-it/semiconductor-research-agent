@@ -157,31 +157,85 @@ def build_evidence_index(tool_outputs: list[str]) -> dict[str, list[dict]]:
     return index
 
 
-def claim_support_rate(report_md: str, tool_outputs: list[str]) -> dict:
-    """数字级 claim 支持率：报告中带单位数字的论断，其数字是否在检索证据中出现过。
+def build_url_span_index(tool_outputs: list[str]) -> dict[str, list[str]]:
+    """按 URL 索引证据 span：url -> [span 文本]（claim 精确绑定用）。"""
+    index: dict[str, list[str]] = {}
+    for text in tool_outputs or []:
+        for m in _URL_RE.finditer(text or ""):
+            url = m.group(0).rstrip(".,;")
+            start = max(0, m.start() - 80)
+            span = re.sub(r"\s+", " ", text[start : m.start()]).strip()[-80:]
+            if span:
+                index.setdefault(url, []).append(span)
+    return index
 
-    比 number_citation_rate 更进一步：不仅"数字后有链接"，还验证"链接对应的检索
-    证据里真的出现过该数字"——防"链接是真的但内容不含该数字"。
-    返回 {"total": 论断数, "supported": 命中数, "unsupported": 抽样,
-    "rate": 支持率}。
+
+def _norm_number(n: str) -> str:
+    """数字标准化：去逗号与空格（"4,675.8 亿" → "4675.8亿"），用于 span 比对。"""
+    return re.sub(r"[\s,]", "", n)
+
+
+def _bind_numbers_to_urls(report_md: str) -> list[dict]:
+    """报告全文：每个有意义数字 → 紧邻 URL（数字后 120 字符内的第一个链接）。
+
+    返回 [{number, url|None, section}]——这是 claim 精确绑定的基础：
+    "数字 → 紧邻 URL"（复审 §6.2：从"URL ∈ 工具池"升级为"数字绑定其紧邻引用 URL"）。
     """
-    claims = extract_numeric_claims(report_md or "")
-    if not claims:
-        return {"total": 0, "supported": 0, "unsupported": [], "rate": 1.0}
-    index = build_evidence_index(tool_outputs)
+    out: list[dict] = []
+    section = ""
+    for line in (report_md or "").split("\n"):
+        if line.strip().startswith("#"):
+            section = line.strip().lstrip("#").strip()[:30]
+        for m in _MEANINGFUL_NUMBER_RE.finditer(line):
+            window = line[m.end() : m.end() + 120]
+            um = re.search(r"\[[^\]]*\]\((https?://[^\)\s]+)\)", window) or re.search(
+                r"https?://[^\s\)\]\}，。；、]+", window
+            )
+            url = um.group(1).rstrip(".,;") if um else None
+            out.append({"number": m.group(0).strip(), "url": url, "section": section})
+    return out
+
+
+def claim_support_rate(report_md: str, tool_outputs: list[str]) -> dict:
+    """数字级 claim 支持率（复审 §6.1/6.2 整改：精确绑定，替代旧的 any-match）。
+
+    判定链（all-match，每个数字独立判定）：
+    1. 数字必须有**紧邻 URL**（数字后 120 字符内，来自报告自身的 Markdown 链接）；
+    2. 该 URL 必须在检索证据池中出现（grounding）；
+    3. **该 URL 对应的证据 span 必须包含该数字**（标准化后比对）——
+       防"报告中 100 亿 链接到 B、999 亿 链接到 A，证据池 A/B 反向含数字"的交叉错配。
+
+    返回 {"total": 数字数, "supported": 支持数, "unsupported": 抽样,
+    "rate": 支持率, "coverage": 数字覆盖率（total>0 时为 1）}。
+    """
+    numbers = _bind_numbers_to_urls(report_md or "")
+    total = len(numbers)
+    if not total:
+        return {"total": 0, "supported": 0, "unsupported": [], "rate": 1.0, "coverage": 0.0}
+    url_spans = build_url_span_index(tool_outputs)
     supported = 0
     unsupported: list[str] = []
-    for c in claims:
-        if any(n in index for n in c["numbers"]):
-            supported += 1
+    for item in numbers:
+        num = item["number"]
+        url = item["url"]
+        norm = _norm_number(num)
+        # 1) 无紧邻 URL → 不支持；2) URL 不在证据池 → 不支持
+        if url and url in url_spans:
+            # 3) 该 URL 的任一 span 含该数字（标准化）→ 支持
+            if any(norm in _norm_number(span) for span in url_spans[url]):
+                supported += 1
+                continue
+            unsupported.append(f"{num}→{url}（span 无此数）")
+        elif url is None:
+            unsupported.append(f"{num}（无紧邻 URL）")
         else:
-            unsupported.append(c["claim"][:60])
-    total = len(claims)
+            unsupported.append(f"{num}→{url}（URL 不在证据池）")
     return {
         "total": total,
         "supported": supported,
         "unsupported": unsupported[:10],
         "rate": round(supported / total, 3) if total else 1.0,
+        "coverage": 1.0,
     }
 
 

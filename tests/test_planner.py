@@ -189,7 +189,8 @@ def test_claim_support_rate():
         "台积电7月营收 4,675.8 亿新台币 同比 +44.7% (来源: https://www.sec.gov/tsm.htm)",
         "存储芯片价格涨幅超 200% (来源: https://www.ithome.com/x)",
     ]
-    # 报告含 3 个带单位数字论断：4,675.8 亿（有证据）、+44.7%（有证据）、99.9%（无证据）
+    # 报告含 3 个带单位数字：4,675.8 亿 与 44.7% 绑定 sec.gov（span 含数字，支持）；
+    # 99.9% 绑定 ithome.com/y（证据池无该 URL 的该数字 span → 不支持）
     report = (
         "台积电 7 月营收 4,675.8 亿新台币[来源](https://www.sec.gov/tsm.htm)，"
         "同比 +44.7%[来源](https://www.sec.gov/tsm.htm)。\n"
@@ -201,14 +202,46 @@ def test_claim_support_rate():
     assert extract_numeric_claims("2026 年 3 家公司披露 0001046179 文件") == []
 
     r = claim_support_rate(report, tool_outputs)
-    assert r["total"] == 2
-    assert r["supported"] == 1  # 论断1（4,675.8 亿 + 44.7%）有证据；论断2（99.9%）无
-    assert r["rate"] == 0.5
+    assert r["total"] == 3  # 数字级判定：4,675.8 亿、44.7%、99.9%
+    assert r["supported"] == 2
+    assert r["rate"] == round(2 / 3, 3)
     assert any("99.9%" in c for c in r["unsupported"])
 
     idx = build_evidence_index(tool_outputs)
     assert "4,675.8 亿" in idx  # 数字倒排索引命中（键带单位）
     assert idx["4,675.8 亿"][0]["url"] == "https://www.sec.gov/tsm.htm"
+
+
+def test_claim_support_cross_mismatch_blocked():
+    """复审 §6.1/6.2：交叉错配必须被拦截——报告数字绑定 A 但 A 的 span 无此数。"""
+    from agent.evidence import claim_support_rate
+
+    # 证据池：A 的 span 含 100 亿，B 的 span 含 999 亿
+    tool_outputs = [
+        "苹果出货 100 亿 (来源: https://a.com)",
+        "谷歌采购 999 亿 (来源: https://b.com)",
+    ]
+    # 报告把 100 亿 链接到 B、999 亿 链接到 A——反向错配
+    report = (
+        "苹果出货 100 亿[来源](https://b.com)，"
+        "谷歌采购 999 亿[来源](https://a.com)。"
+    )
+    r = claim_support_rate(report, tool_outputs)
+    # 旧 any-match 实现：数字都在证据池 → rate=1.0（漏洞）；
+    # 精确绑定：100 亿→b.com 的 span 无"100 亿"，999 亿→a.com 的 span 无"999 亿" → 全拦
+    assert r["rate"] == 0.0
+    assert r["supported"] == 0
+
+
+def test_claim_support_requires_adjacent_url():
+    """数字无紧邻 URL → 不支持（空证据不再默认满分，复审 §6.4）。"""
+    from agent.evidence import claim_support_rate
+
+    report = "毛利率 54% 数字后没有任何链接，只有纯文字说明。"
+    r = claim_support_rate(report, ["某证据 54% (来源: https://x.com)"])
+    assert r["total"] == 1
+    assert r["rate"] == 0.0  # 无紧邻 URL → 不支持
+    assert "无紧邻 URL" in r["unsupported"][0]
 
 
 def test_generate_injects_plan_into_researcher_task(tmp_path, monkeypatch):
