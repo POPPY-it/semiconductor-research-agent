@@ -16,17 +16,29 @@ class Embedder(ABC):
 
 
 class FastembedEmbedder(Embedder):
-    """fastembed + BAAI/bge-small-zh-v1.5（ONNX runtime，CPU 即可）。
+    """fastembed + BAAI/bge-small-zh-v1.5（ONNX Runtime，CPU/GPU 可选）。
 
     模型首次使用自动下载；国内网络请设置 HF_ENDPOINT=https://hf-mirror.com。
+    providers：None=CPU（默认）；["CUDAExecutionProvider","CPUExecutionProvider"]=GPU
+    （需安装 onnxruntime-gpu，CUDA 不可用时自动回退 CPU）。
     """
 
-    def __init__(self, model_name: str = "BAAI/bge-small-zh-v1.5", cache_dir: str | None = None):
+    def __init__(
+        self,
+        model_name: str = "BAAI/bge-small-zh-v1.5",
+        cache_dir: str | None = None,
+        providers: list[str] | None = None,
+    ):
+        from agent.knowledge.onnx_env import ensure_nvidia_dll_path
+
+        ensure_nvidia_dll_path()  # GPU 需要 nvidia bin 在 PATH（import onnxruntime 之前）
         from fastembed import TextEmbedding  # 延迟导入，保持核心无重依赖
 
-        kwargs = {"model_name": model_name}
+        kwargs: dict = {"model_name": model_name}
         if cache_dir:
             kwargs["cache_dir"] = cache_dir
+        if providers:
+            kwargs["providers"] = providers
         self._model = TextEmbedding(**kwargs)
         self._dim: int | None = None
 

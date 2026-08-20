@@ -59,6 +59,8 @@ class Settings:
     # 故障注入（P1-2 验收钩子）：逗号分隔的 URL 域名片段，命中即模拟外部 API 失败，
     # 用于演示「arXiv 挂掉任务仍能用知识库+SEC 出报告」。空=不注入。
     SIMULATED_API_FAILURES: str = os.getenv("SIMULATED_API_FAILURES", "")
+    # 本地模型推理设备：cpu（默认）/ cuda（需 onnxruntime-gpu，CUDA 不可用自动回退 CPU）
+    EMBED_PROVIDERS: str = os.getenv("EMBED_PROVIDERS", "cpu")
     # MCP：要接入的 MCP Server 列表（逗号分隔），当前支持 github/fetch
     MCP_SERVERS: str = os.getenv("MCP_SERVERS", "github,fetch")
     # HTTP MCP（可选）：搜索代理网关（如 Serper/Tavily/Exa 聚合）。

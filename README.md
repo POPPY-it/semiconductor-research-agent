@@ -39,8 +39,7 @@
 | LLM | DeepSeek `deepseek-chat`（OpenAI 兼容；可配备用模型） |
 | 任务队列 | **ThreadPoolQueue**（默认；RQ+Redis 为预留扩展，未启用） |
 | 鉴权 | **共享 API Token → HttpOnly Cookie**（单用户；非多租户 JWT） |
-| 知识层 | 分块 + BM25/向量加权 RRF + bge-reranker（Chroma）+ **实体共现图**（词典匹配 + 共现边） |
-| 记忆 | **跨会话偏好记忆**（LLM 抽取 → SQLite + 向量召回） |
+| 知识层 | 分块 + BM25/向量加权 RRF + bge-reranker（Chroma）+ **实体共现图**（词典匹配 + 共现边） || 记忆 | **跨会话偏好记忆**（LLM 抽取 → SQLite + 向量召回） |
 | 服务层 | FastAPI + SSE + 限流 + 预算熔断 + 指标 |
 | 前端 | React + Vite + TS + Ant Design |
 | 部署 | Docker Compose（单机） |
@@ -83,6 +82,11 @@ python -m venv .venv
 .venv\Scripts\pip install -r requirements.txt
 
 # 配置 .env（已 gitignore）：DEEPSEEK_API_KEY / API_TOKEN 等
+
+# 本地模型推理设备（embedding/reranker）：cpu（默认）/ cuda
+#   cuda 需要：onnxruntime-gpu + nvidia-*-cu12 wheels（代码自动把 nvidia bin 加入 PATH），
+#   并确保 GPU 显存空闲（实测 8GB 卡被其他进程占用过半时 CUDA EP 会 bad allocation 崩溃）
+EMBED_PROVIDERS=cpu
 
 # 启动完整产品（需先构建前端）
 cd frontend; npm install --registry=https://registry.npmmirror.com; npm run build; cd ..

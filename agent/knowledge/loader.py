@@ -16,6 +16,15 @@ from agent.knowledge.store import ChromaStore  # noqa: E402
 from data.storage import SQLiteStore  # noqa: E402
 
 
+def _providers() -> list[str] | None:
+    """按 settings.EMBED_PROVIDERS 返回 ONNX providers（cuda → GPU，失败自动回退 CPU）。"""
+    from backend.app.core import settings
+
+    if settings.EMBED_PROVIDERS == "cuda":
+        return ["CUDAExecutionProvider", "CPUExecutionProvider"]
+    return None
+
+
 def build_retriever(
     db_path: str | Path,
     vector_dir: str | Path,
@@ -43,11 +52,11 @@ def build_retriever(
                 )
             )
 
-    embedder = FastembedEmbedder(cache_dir=str(model_dir))
+    embedder = FastembedEmbedder(cache_dir=str(model_dir), providers=_providers())
     chroma = ChromaStore(vector_dir, collection="main")
     if reset:
         chroma.reset()  # 重建索引：清空旧集合，避免 doc_id 冲突
-    reranker = FastembedReranker(cache_dir=str(model_dir)) if with_reranker else None
+    reranker = FastembedReranker(cache_dir=str(model_dir), providers=_providers()) if with_reranker else None
     retriever = HybridRetriever(docs, embedder, chroma, reranker=reranker)
     retriever.index()
 
