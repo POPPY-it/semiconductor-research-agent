@@ -1,8 +1,9 @@
-"""跨会话偏好记忆（思路参考 Mem0，自研实现）：抽取 → 存储 → 语义召回。
+"""跨会话偏好记忆（思路参考 Mem0，自研实现）：抽取 → 去重存储 → 语义召回。
 
 三步走：
 1. extract：对话结束后用 LLM 抽取"值得记住"的用户偏好/关注方向/重要事实
-2. store：写入 SQLite（持久化）+ 向量索引（语义召回）
+2. store：入库前**相似度去重**（字符 bigram Jaccard ≥ 阈值 → 不新增；
+   新表述更长则覆盖旧条——同事实只保留最新一条，P2-1 整改）
 3. search：新对话时按问题语义召回相关记忆，注入上下文
 
 设计：单用户产品默认 user_id="default"；embedder 可注入（语义），缺省回退关键词召回。
@@ -10,6 +11,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 import threading
 from pathlib import Path
@@ -64,20 +66,76 @@ class MemoryStore:
         except Exception:  # noqa: BLE001 —— 抽取失败不阻断主流程
             return []
 
-    # ---- 存储 ----
-    def add(self, content: str, user_id: str = "default") -> None:
+    # ---- 存储（含相似度去重，P2-1 整改）----
+
+    # 领域实体词表：同主题判断用（与知识库实体共现图同思路的轻量版）
+    _TOPIC_TERMS = (
+        "HBM", "DRAM", "NAND", "存内计算", "PIM", "先进封装", "CoWoS",
+        "2nm", "3nm", "EUV", "光刻", "台积电", "ASML", "NVIDIA", "英特尔",
+        "三星", "SK海力士", "美光", "存储", "半导体", "AI", "大模型",
+        "Agent", "芯片", "设备", "材料",
+    )
+
+    @staticmethod
+    def _topic_terms(s: str) -> set[str]:
+        return {t for t in MemoryStore._TOPIC_TERMS if t.lower() in s.lower()}
+
+    @staticmethod
+    def _bigram_sim(a: str, b: str) -> float:
+        """字符 bigram **Dice** 系数（零依赖；对短文本比 Jaccard 更鲁棒）。
+
+        去空白小写后按相邻两字切组；空输入相似度为 0。
+        """
+        def grams(s: str) -> set[str]:
+            s = re.sub(r"\s+", "", s.lower())
+            if len(s) < 2:
+                return {s} if s else set()
+            return {s[i : i + 2] for i in range(len(s) - 1)}
+
+        ga, gb = grams(a), grams(b)
+        if not ga or not gb:
+            return 0.0
+        inter = len(ga & gb)
+        return 2 * inter / (len(ga) + len(gb))
+
+    def add(self, content: str, user_id: str = "default", dedup_threshold: float = 0.75) -> None:
+        """入库前双通道去重（P2-1 整改）：
+
+        1. **领域实体共现**：与现有记忆命中同一实体（HBM/台积电/先进封装…）→ 同主题，
+           按强命中处理（新表述覆盖旧条，防新增内容稀释字符串相似度）；
+        2. **bigram Dice 相似度** ≥ 阈值 → 重复（新表述更长则覆盖旧条）。
+        两条都满足"同事实只保留最新一条"，并刷新时间戳。
+        """
         content = content.strip()
         if not content:
             return
         with self._lock:
+            rows = self._conn.execute(
+                "SELECT id, content FROM memories WHERE user_id = ? ORDER BY id DESC LIMIT 200",
+                (user_id,),
+            ).fetchall()
+            best_id, best_score, best_len = None, 0.0, 0
+            new_terms = self._topic_terms(content)
+            for mid, mcontent in rows:
+                s = self._bigram_sim(content, mcontent)
+                if new_terms and self._topic_terms(mcontent) & new_terms:
+                    s = max(s, dedup_threshold)  # 同主题 → 强命中
+                if s > best_score:
+                    best_id, best_score, best_len = mid, s, len(mcontent)
+            if best_id is not None and best_score >= dedup_threshold:
+                if len(content) > best_len:
+                    # 同主题更新：新表述更具体 → 覆盖旧条（doc_id 不变，召回映射取最新内容）
+                    self._conn.execute(
+                        "UPDATE memories SET content = ?, created_at = datetime('now','localtime') WHERE id = ?",
+                        (content, best_id),
+                    )
+                return  # 重复：不新增
             cur = self._conn.execute(
                 "INSERT INTO memories (user_id, content, created_at) VALUES (?, ?, datetime('now','localtime'))",
                 (user_id, content),
             )
             if self._collection is not None:
                 try:
-                    from agent.knowledge.embedder import FastembedEmbedder
-
                     emb = self.embedder.embed([content])[0]
                     self._collection.add([str(cur.lastrowid)], [content], [emb])
                 except Exception:  # noqa: BLE001 —— 向量索引失败不阻塞

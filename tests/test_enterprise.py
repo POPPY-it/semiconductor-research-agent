@@ -257,6 +257,38 @@ def test_memory_store_keyword_path(tmp_path):
     assert m.list_all() == []
 
 
+def test_memory_dedup_similar_facts(tmp_path):
+    """P2-1 整改：同一偏好反复入库只保留一条；更具体表述覆盖旧条。"""
+    from agent.memory import MemoryStore
+
+    m = MemoryStore(tmp_path / "mem.db")
+    # 完全重复 → 不新增
+    m.add("用户关注 HBM 与先进封装方向")
+    m.add("用户关注 HBM 与先进封装方向")
+    assert len(m.list_all()) == 1
+    # 高度相似（bigram Jaccard ≥ 0.8）→ 不新增
+    m.add("用户关注 HBM 和先进封装方向")
+    assert len(m.list_all()) == 1
+    # 不同事实 → 新增
+    m.add("用户关注存内计算方向")
+    m.add("用户偏好深度研报")
+    assert len(m.list_all()) == 3
+    # 更具体表述覆盖旧条：内容变长、条数不变、检索仍是新表述
+    m.add("用户关注 HBM、先进封装与 2nm 制程方向")
+    assert len(m.list_all()) == 3
+    assert any("2nm" in x for x in m.list_all())
+    assert sum(1 for x in m.list_all() if "HBM" in x) == 1  # 同主题只剩最新一条
+
+
+def test_memory_dedup_low_similarity_kept(tmp_path):
+    from agent.memory import MemoryStore
+
+    m = MemoryStore(tmp_path / "mem.db")
+    m.add("用户关注存储芯片涨价趋势")
+    m.add("用户关注 AI 智能体在办公场景的应用")  # bigram 重叠低 → 保留
+    assert len(m.list_all()) == 2
+
+
 def test_memory_extract_with_fake_client():
     from agent.memory import MemoryStore
 
